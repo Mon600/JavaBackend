@@ -1,0 +1,5991 @@
+package tictactoe.di;
+
+
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import tictactoe.datasource.repository.GameRepository;
+import tictactoe.datasource.repository.UserRepository;
+import tictactoe.domain.model.AuthFilter;
+import tictactoe.domain.service.AuthService;
+import tictactoe.domain.service.GameService;
+import tictactoe.datasource.service.GameRepositoryService;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import tictactoe.domain.service.UserService;
+
+import java.util.List;
+
+@Configuration
+public class SpringConfiguration {
+
+    @Bean
+    public GameService gameService() {
+        return new GameService();
+    }
+
+    @Bean
+    public GameRepositoryService repositoryService(GameRepository gameRepository) {
+        return new GameRepositoryService(gameRepository);
+    }
+
+
+    @Bean
+    public UserService userService(UserRepository userRepository) {
+        return new UserService(userRepository);
+    }
+
+
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    public AuthService authService(PasswordEncoder passwordEncoder, UserService userService) {
+        return new AuthService(passwordEncoder, userService);
+    }
+
+    @Bean
+    public AuthFilter authFilter(PasswordEncoder passwordEncoder, AuthService authService) {
+        return new AuthFilter(authService, passwordEncoder);
+    }
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http, AuthFilter authFilter) throws Exception {
+        http
+            .csrf(csrf -> csrf.disable())
+            .authorizeHttpRequests(auth -> auth
+            .requestMatchers("/auth/**").permitAll()
+            .anyRequest().authenticated())
+            .addFilterBefore(authFilter, UsernamePasswordAuthenticationFilter.class);
+        return http.build();
+    }
+
+
+
+
+
+}
+package tictactoe.web.model;
+
+
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import lombok.Getter;
+
+@Getter
+public class SignUpRequest {
+    @Size(min = 2, max = 32, message = "Wrong login length (2 to 32 characters long)")
+    @Pattern(regexp = "^\\S+$", message = "Spaces are not allowed")
+    private String login;
+
+    @Size(min = 8, max = 64, message = "Wrong password length (8 to 64 characters long)")
+    @Pattern(regexp = "^\\S+$", message = "Spaces are not allowed")
+    private String password;
+}
+package tictactoe.web.model;
+
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+public class TurnRequest {
+    @Min(1) @Max(3) private int row;
+    @Min(1) @Max(3) private int col;
+    private String player;
+
+    public static PlayerEnum getPlayerToDomain(TurnRequest request) {
+        if (request.getPlayer().equalsIgnoreCase("player")) {
+            return PlayerEnum.PLAYER;
+        } else if (request.getPlayer().equalsIgnoreCase("ai")) {
+            return PlayerEnum.AI;
+        } else {
+            throw new IllegalArgumentException("Unknown player");
+        }
+    }
+}
+package tictactoe.web.model;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+
+import java.time.LocalDateTime;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.UUID;
+
+
+@RestControllerAdvice
+public class WebExceptionHandler {
+
+    @ExceptionHandler(NoSuchElementException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public Map<String, Object> handleNotFound(NoSuchElementException ex) {
+        return Map.of(
+                "timestamp", LocalDateTime.now(),
+                "status", 404,
+                "error", "Not Found",
+                "message", ex.getMessage()
+        );
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Map<String, Object> handleIllegalArgument(IllegalArgumentException ex) {
+        return Map.of(
+                "timestamp", LocalDateTime.now(),
+                "status", 400,
+                "error", "Invalid data",
+                "message", ex.getMessage()
+        );
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public Map<String, Object> handleInvalidUUID(MethodArgumentTypeMismatchException ex) {
+        if (ex.getRequiredType() != null && ex.getRequiredType().equals(UUID.class)) {
+            return Map.of(
+                    "timestamp", LocalDateTime.now(),
+                    "status", 404,
+                    "error", "Not found",
+                    "message", "Game not found"
+            );
+        }
+        return Map.of(
+                "timestamp", LocalDateTime.now(),
+                "status", 400,
+                "error", "Invalid data",
+                "message", ex.getMessage()
+        );
+    }
+
+    @ExceptionHandler(IllegalStateException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public Map<String, Object> handleIllegalState(IllegalStateException ex) {
+        return Map.of(
+                "timestamp", LocalDateTime.now(),
+                "status", 409,
+                "error", "Invalid data",
+                "message", ex.getMessage()
+        );
+    }
+}
+package tictactoe.web.model;
+
+import lombok.Builder;
+import lombok.Getter;
+import tictactoe.domain.model.*;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
+
+@Builder
+@Getter
+public class WebDTO {
+    private final UUID id;
+    private final boolean isAiFirstTurn;
+    private String[][] field;
+    private String currentPlayer;
+    private List<TurnRequest> turns;
+    private String result;
+
+
+    public static String[][] getGameFieldResponse(Game game) {
+        Field field = game.getField();
+        int rows = field.getRows();
+        int cols = field.getCols();
+        int[][] fieldMatrix = field.getFieldMatrix();
+        boolean isAiCross = game.isAiFirstTurn();
+        String[][] fieldResponse = new String[rows][cols];
+        for (int i = 0; i < rows; i++) {
+            for (int j = 0; j < cols; j++) {
+                int fieldCellValue = fieldMatrix[i][j];
+                switch (fieldCellValue) {
+                    case 0 -> fieldResponse[i][j] = " ";
+                    case 1 -> fieldResponse[i][j] = isAiCross ? "O" : "X";
+                    case 2 -> fieldResponse[i][j] = isAiCross ? "X" : "O";
+                    default -> throw new IllegalArgumentException("Incorrect field value");
+                }
+            }
+        }
+        return fieldResponse;
+    }
+
+    public static List<TurnRequest> getTurnsResponse(Game game) {
+        List<Turn> gameTurns = game.getTurns();
+        List<TurnRequest> turnsResponse = new ArrayList<>();
+        for (Turn turn : gameTurns) {
+            int row = turn.getPosition().getRow() + 1;
+            int col = turn.getPosition().getCol() + 1;
+            String player = turn.getPlayer().getPlayerName();
+            turnsResponse.add(new TurnRequest(row, col, player));
+        }
+        return turnsResponse;
+    }
+
+    public static String getCurrentPlayerResponse(Game game) {
+        return game.getTurnOrder().getPlayerName();
+    }
+
+    public static String getResultResponse(Game game) {
+        return game.getResult().getResultString();
+    }
+
+    public static Field getFieldGame(WebDTO gameResponse) {
+        String[][] field = gameResponse.getField();
+        int rows = field.length;
+        int cols = field[rows - 1].length;
+        boolean isAiCross = gameResponse.isAiFirstTurn();
+        if (rows != cols) {
+            throw new IllegalArgumentException("Incorrect field size");
+        }
+        Field gameField = new Field();
+        for (int i = 0; i < rows; i++) {
+            for (int j = 0; j < cols; j++) {
+                if (field[i].length != rows) {
+                    throw new IllegalArgumentException("Incorrect field size");
+                }
+                String cell = field[i][j];
+                FieldPosition position = new FieldPosition(i, j);
+                switch (cell) {
+                    case "X" -> gameField.setFieldValue(position, isAiCross ? 2 : 1);
+                    case "O" -> gameField.setFieldValue(position, isAiCross ? 1 : 2);
+                    case " " -> gameField.setFieldValue(position, 0);
+                    default -> throw new IllegalArgumentException("Incorrect field value");
+                }
+            }
+        }
+        return gameField;
+    }
+
+    public static List<Turn> getTurnsGame(WebDTO gameResponse) {
+        List<Turn> gameTurns = new ArrayList<>();
+        List<TurnRequest> responseTurns = gameResponse.getTurns();
+        for (TurnRequest turn : responseTurns) {
+            Turn turnGame = getTurnGame(turn);
+            gameTurns.add(turnGame);
+        }
+        return gameTurns;
+    }
+
+    public static Turn getTurnGame(TurnRequest turnInfo) {
+        int row = turnInfo.getRow() - 1;
+        int col = turnInfo.getCol() - 1;
+        String playerName = turnInfo.getPlayer();
+        PlayerEnum player;
+        switch (playerName) {
+            case "Player" -> player = PlayerEnum.PLAYER;
+            case "AI" -> player = PlayerEnum.AI;
+            default -> throw new IllegalArgumentException("Incorrect turn player");
+        }
+        return new Turn(
+                new FieldPosition(row, col),
+                player
+        );
+    }
+
+
+    public static PlayerEnum getPlayerGame(WebDTO gameResponse) {
+        return switch (gameResponse.getCurrentPlayer().toLowerCase()) {
+            case "player" -> PlayerEnum.PLAYER;
+            case "ai" -> PlayerEnum.AI;
+            default -> throw new IllegalArgumentException("Incorrect player type");
+        };
+    }
+
+
+    public static GameResult getResultGame(WebDTO gameResponse) {
+        return switch (gameResponse.getResult().toLowerCase()) {
+            case "processing" -> GameResult.PROCESSING;
+            case "draw" -> GameResult.DRAW;
+            case "ai won" -> GameResult.AI_WON;
+            case "player won" -> GameResult.PLAYER_WON;
+            default -> throw new IllegalArgumentException("Incorrect result type");
+        };
+    }
+}
+package tictactoe.web.mapper;
+
+import tictactoe.domain.model.User;
+import tictactoe.web.model.SignUpRequest;
+
+public class UserRequestMapper {
+    public static User toUser(SignUpRequest credentials) {
+        return new User(credentials.getLogin());
+    }
+}
+package tictactoe.web.mapper;
+
+import tictactoe.domain.model.FieldPosition;
+import tictactoe.domain.model.Game;
+import tictactoe.domain.model.Turn;
+import tictactoe.web.model.TurnRequest;
+import tictactoe.web.model.WebDTO;
+
+
+public class WebDTOMapper {
+    public static WebDTO toResponse(Game game) {
+        return WebDTO.builder()
+                .id(game.getGameId())
+                .isAiFirstTurn(game.isAiFirstTurn())
+                .field(WebDTO.getGameFieldResponse(game))
+                .turns(WebDTO.getTurnsResponse(game))
+                .currentPlayer(WebDTO.getCurrentPlayerResponse(game))
+                .result(WebDTO.getResultResponse(game))
+                .build();
+    }
+
+    public static Game toGame(WebDTO gameResponse) {
+        return new Game(
+                gameResponse.getId(),
+                WebDTO.getFieldGame(gameResponse),
+                WebDTO.getTurnsGame(gameResponse),
+                WebDTO.getPlayerGame(gameResponse),
+                WebDTO.getResultGame(gameResponse)
+        );
+    }
+
+    public static Turn toTurnGame(TurnRequest request) {
+        return new Turn(
+                new FieldPosition(request.getRow() - 1, request.getCol() - 1),
+                TurnRequest.getPlayerToDomain(request)
+        );
+    }
+
+    public static TurnRequest toTurnRequest(Turn turn) {
+        return new TurnRequest(
+                turn.getPosition().getRow() + 1,
+                turn.getPosition().getCol() + 1,
+                turn.getPlayer().getPlayerName()
+        );
+    }
+}
+package tictactoe.web.controller;
+
+
+import tictactoe.domain.model.Game;
+import tictactoe.domain.model.Turn;
+
+import tictactoe.domain.service.GameService;
+import tictactoe.datasource.service.GameRepositoryService;
+import org.springframework.web.bind.annotation.*;
+import tictactoe.web.mapper.WebDTOMapper;
+import tictactoe.web.model.TurnRequest;
+import tictactoe.web.model.WebDTO;
+
+import java.util.List;
+
+import java.util.UUID;
+
+
+@RestController
+@RequestMapping("/game")
+@CrossOrigin(origins = "*")
+public class GameController {
+    private final GameRepositoryService repositoryService;
+    private final GameService gameService;
+
+    public GameController(GameRepositoryService repositoryService, GameService gameService) {
+        this.repositoryService = repositoryService;
+        this.gameService = gameService;
+    }
+
+    @PostMapping("/create")
+    public WebDTO createGame() {
+        Game newGame = gameService.createGame();
+        Game savedGame = repositoryService.saveOrUpdateGame(newGame);
+        return WebDTOMapper.toResponse(savedGame);
+    }
+
+    @GetMapping("/{gameId}")
+    public WebDTO getGame(@PathVariable("gameId") UUID id) {
+        return WebDTOMapper.toResponse(repositoryService.getGameById(id));
+    }
+
+    @PostMapping("/{gameId}/move")
+    public WebDTO makeMove(@PathVariable("gameId") UUID id, @RequestBody TurnRequest request) {
+        Game game = repositoryService.getGameById(id);
+        Turn turn = WebDTOMapper.toTurnGame(request);
+        Game newTurnGame = gameService.makeTurn(game, turn);
+        repositoryService.saveOrUpdateGame(newTurnGame);
+        return WebDTOMapper.toResponse(newTurnGame);
+    }
+
+    @GetMapping("/all")
+    public List<WebDTO> getAllGames() {
+        List<Game> allGames = repositoryService.getAllGames();
+        return allGames.stream().map(WebDTOMapper::toResponse).toList();
+    }
+}
+package tictactoe.web.controller;
+
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import tictactoe.domain.service.AuthService;
+import tictactoe.web.model.SignUpRequest;
+
+
+import javax.naming.AuthenticationException;
+import java.util.UUID;
+
+@RestController
+@RequestMapping("/auth")
+@CrossOrigin(origins = "*")
+public class AuthController {
+    private AuthService authService;
+
+    public AuthController(AuthService authService) {
+        this.authService = authService;
+    }
+
+
+    @PostMapping("signup")
+    public ResponseEntity<String> signUp(@RequestBody SignUpRequest credentials) {
+        boolean registrationStatus = authService.signUpUser(credentials);
+        if (!registrationStatus) {
+            return ResponseEntity.status(409).body("Registration failed!");
+        }
+        return ResponseEntity.status(201).body("Success!");
+    }
+
+
+    @PostMapping("login")
+    public UUID signIn(@RequestHeader("Authorization") String authHeader) throws AuthenticationException {
+        return authService.signInUser(authHeader);
+    }
+}
+package tictactoe;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class Application {
+    public static void main(String[] args) {
+        SpringApplication.run(Application.class, args);
+    }
+}package tictactoe.domain.model;
+
+import lombok.Getter;
+
+@Getter
+public enum GameResult {
+    AI_WON("AI won"),
+    PLAYER_WON("Player won"),
+    DRAW("Draw"),
+    PROCESSING("Processing");
+
+    String resultString;
+
+    GameResult(String result) {
+        this.resultString = result;
+    }
+
+}
+package tictactoe.domain.model;
+
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.ServletRequest;
+import jakarta.servlet.ServletResponse;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.filter.GenericFilterBean;
+import tictactoe.domain.service.AuthService;
+
+import java.io.IOException;
+import java.util.UUID;
+
+
+public class AuthFilter extends GenericFilterBean {
+    AuthService authService;
+    PasswordEncoder passwordEncoder;
+
+    public AuthFilter(AuthService authService, PasswordEncoder passwordEncoder) {
+        this.authService = authService;
+        this.passwordEncoder = passwordEncoder;
+    }
+
+    @Override
+    public void doFilter(ServletRequest request, ServletResponse response, FilterChain filterChain) throws IOException, ServletException {
+        HttpServletRequest mappedRequest = (HttpServletRequest) request;
+        HttpServletResponse mappedResponse = (HttpServletResponse) response;
+        String path = mappedRequest.getRequestURI();
+
+        if ("OPTIONS".equalsIgnoreCase(mappedRequest.getMethod())) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        if (path.startsWith("/auth/")) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        try {
+            String headerAuthString = mappedRequest.getHeader("Authorization");
+            UUID userId = authService.signInUser(headerAuthString);
+            mappedRequest.setAttribute("userId", userId);
+            filterChain.doFilter(request, response);
+        } catch (BadCredentialsException e) {
+            mappedResponse.sendError(401, e.getMessage());
+        }
+    }
+}
+package tictactoe.domain.model;
+
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+
+@Getter
+@AllArgsConstructor
+public class FieldPosition {
+    private int row;
+    private int col;
+}package tictactoe.domain.model;
+
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+import java.util.Optional;
+import java.util.UUID;
+
+@Setter
+@Getter
+@NoArgsConstructor
+public class User {
+    private UUID userId;
+    private String login;
+
+    public User(String login) {
+        this.userId = null;
+        this.login = login;
+    }
+
+
+    public Optional<UUID> getUserId() {
+        return Optional.ofNullable(this.userId);
+    }
+}
+package tictactoe.domain.model;
+
+import lombok.Builder;
+import lombok.Getter;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.UUID;
+
+
+
+@Getter
+public class Game {
+    private final UUID gameId;
+    private final Field field;
+    private final List<Turn> turns;
+    private PlayerEnum turnOrder;
+    private GameResult result;
+
+    public Game() {
+        this.gameId = null;
+        this.field = new Field();
+        this.turns = new ArrayList<>();
+        this.turnOrder = PlayerEnum.getRandomTurnOrder();
+        this.result = GameResult.PROCESSING;
+    }
+
+    public Game(UUID gameId, Field field, List<Turn> turns, PlayerEnum turnOrder, GameResult result) {
+        this.gameId = gameId;
+        this.field = field;
+        this.turns = turns != null ? new ArrayList<>(turns) : new ArrayList<>();
+        this.turnOrder = turnOrder;
+        this.result = result;
+    }
+
+    public List<Turn> getTurns() {
+        return Collections.unmodifiableList(turns);
+    }
+
+    public boolean isAiFirstTurn() {
+        if (this.turns.isEmpty()) {
+            return this.turnOrder.isAiTurn();
+        }
+        return this.turns.getFirst().getPlayer().isAiTurn();
+    }
+
+
+}package tictactoe.domain.model;
+
+import lombok.Getter;
+
+import java.util.concurrent.ThreadLocalRandom;
+
+@Getter
+public enum PlayerEnum{
+    PLAYER(false, "Player"),
+    AI(true, "AI");
+
+    boolean isAiTurn;
+    String playerName;
+
+    PlayerEnum(boolean isAiTurn, String playerName) {
+        this.isAiTurn = isAiTurn;
+        this.playerName = playerName;
+    }
+
+    public static PlayerEnum getRandomTurnOrder() {
+        return values()[ThreadLocalRandom.current().nextInt(values().length)];
+    }
+
+}
+package tictactoe.domain.model;
+
+import lombok.Builder;
+import lombok.Getter;
+
+@Getter
+public class Field {
+    private static final int rows = 3;
+    private static final  int cols = 3;
+    private final int[][] fieldMatrix;
+
+    public Field() {
+        this.fieldMatrix = new int[rows][cols];
+    }
+
+    public int getRows() {
+        return rows;
+    }
+
+    public int getCols() {
+        return cols;
+    }
+
+
+    public int[][] getFieldMatrix() {
+        int[][] fieldCopy = new int[rows][cols];
+        for (int i = 0; i < this.rows; i++) {
+            System.arraycopy(fieldMatrix[i], 0, fieldCopy[i], 0, this.cols);
+        }
+        return fieldCopy;
+    }
+
+    public static Field getFieldCopy(Field original) {
+        Field copy = new Field();
+        int[][] src = original.getFieldMatrix();
+        for (int i = 0; i < original.getRows(); i++) {
+            System.arraycopy(src[i], 0, copy.fieldMatrix[i], 0, original.getCols());
+        }
+        return copy;
+    }
+
+
+    public boolean setFieldValue(FieldPosition turnPos, int turn) {
+        int row = turnPos.getRow();
+        int col = turnPos.getCol();
+        if (row > rows - 1 || row < 0 || col > cols - 1 || col < 0) {
+            return false;
+        }
+        if (this.fieldMatrix[row][col] != 0) {
+            return false;
+        }
+        if (turn < 1 || turn > 2) {
+            return false;
+        }
+        this.fieldMatrix[row][col] = turn;
+        return true;
+    }
+
+    public int getFieldValue(FieldPosition position) {
+        int row = position.getRow();
+        int col = position.getCol();
+        if (row > rows - 1 || row < 0 || col > cols - 1 || col < 0) {
+            throw new IllegalArgumentException(
+                    String.format("Incorrect coordinates [%d %d]. Range: row [0-%d], col[0-%d]",
+                            row,
+                            col,
+                            this.rows - 1,
+                            this.cols - 1)
+            );
+        }
+        return fieldMatrix[position.getRow()][position.getCol()];
+    }
+}package tictactoe.domain.model;
+
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+
+@AllArgsConstructor
+@Getter
+public class Turn {
+    private FieldPosition position;
+    private PlayerEnum player;
+}
+package tictactoe.domain.service;
+
+import tictactoe.datasource.model.UserEntity;
+import tictactoe.domain.model.User;
+
+import java.util.Optional;
+
+public interface UserInterface {
+    public boolean createUser(User user, String hashPassword);
+
+    public Optional<UserEntity> getUser(String login);
+}
+package tictactoe.domain.service;
+
+import tictactoe.domain.model.*;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
+
+public class GameService implements GameInterface {
+
+    private final int emptyCell = 0;
+    private final int playerTurn = 1;
+    private final int aiTurn = 2;
+
+
+
+    public Game createGame() {
+        Game game = firstAiTurn(new Game());
+        return game;
+    }
+
+    public Game firstAiTurn(Game game) {
+        if (game.getTurnOrder() == PlayerEnum.AI) {
+            Turn aiTurn = getNextTurn(game);
+            return processAndCheckTurn(game, aiTurn);
+        }
+        return game;
+    }
+
+
+    public Game makeTurn(Game game, Turn turn) {
+        if (game.getResult() != GameResult.PROCESSING) {
+            throw new IllegalStateException("This game is finished: " + game.getResult().getResultString());
+        }
+
+        if (game.getTurnOrder() != PlayerEnum.PLAYER) {
+            throw  new IllegalStateException("It's not your turn to move right now.");
+        }
+
+        if (!isValidMove(game.getField(), turn)) {
+            throw new IllegalArgumentException("Incorrect turn. Try again.");
+        }
+
+        Game gameWithPlayerTurn = processAndCheckTurn(game, turn);
+        if (gameWithPlayerTurn.getResult() != GameResult.PROCESSING) {
+            return gameWithPlayerTurn;
+        }
+
+        Turn aiTurn = getNextTurn(gameWithPlayerTurn);
+        return processAndCheckTurn(gameWithPlayerTurn, aiTurn);
+    }
+
+    private Game processAndCheckTurn(Game currentGame, Turn turn) {
+        GameResult beforeResult = checkGameEnd(currentGame);
+        if (beforeResult != GameResult.PROCESSING) {
+            return finalizeGame(currentGame, beforeResult);
+        }
+        FieldPosition pos = turn.getPosition();
+        PlayerEnum player = turn.getPlayer();
+        Game nextGame = simulateTurn(currentGame, pos, player);
+        GameResult result = checkGameEnd(nextGame);
+        return (result != GameResult.PROCESSING) ? finalizeGame(nextGame, result) : nextGame;
+    }
+
+    public boolean isValidMove(Field field, Turn turn) {
+        FieldPosition position = turn.getPosition();
+        return (field.getFieldValue(position) == 0);
+    }
+
+    @Override
+    public Turn getNextTurn(Game game) {
+        int bestScore = Integer.MIN_VALUE;
+        Field field = game.getField();
+        List<Turn> bestTurns = new ArrayList<>();
+
+        for (int i = 0; i < field.getRows(); i++) {
+            for (int j = 0; j < field.getCols(); j++) {
+
+                FieldPosition currentPosition = new FieldPosition(i, j);
+                if (field.getFieldValue(new FieldPosition(i, j)) == emptyCell) {
+
+                    Game newGame = simulateTurn(game, currentPosition, game.getTurnOrder());
+                    Turn possibleTurn = newGame.getTurns().getLast();
+                    int rating = minMax(newGame, 0);
+
+                    if (rating > bestScore) {
+                        bestScore = rating;
+                        bestTurns.clear();
+                        bestTurns.add(possibleTurn);
+
+                    } else if (rating == bestScore) {
+                        bestTurns.add(possibleTurn);
+                    }
+                }
+            }
+        }
+        if (bestTurns.isEmpty()) {
+            throw new IllegalStateException("No moves available");
+        }
+        return bestTurns.get(ThreadLocalRandom.current().nextInt(bestTurns.size()));
+    }
+
+    @Override
+    public GameResult checkGameEnd(Game game) {
+        Field field = game.getField();
+        List<Turn> turns = game.getTurns();
+        if (turns.isEmpty()) {
+            return GameResult.PROCESSING;
+        }
+        if (game.getResult() != GameResult.PROCESSING) {
+            return game.getResult();
+        }
+
+        Turn turn = turns.getLast();
+        FieldPosition turnPosition = turn.getPosition();
+        boolean resHorizontal = checkHorizontal(field, turnPosition);
+        if (resHorizontal) {
+            return turn.getPlayer().isAiTurn() ? GameResult.AI_WON : GameResult.PLAYER_WON;
+        }
+        boolean resVertical = checkVertical(field, turnPosition);
+        if (resVertical) {
+            return turn.getPlayer().isAiTurn() ? GameResult.AI_WON : GameResult.PLAYER_WON;
+        }
+        if ((turnPosition.getCol() == turnPosition.getRow())
+                || ((turnPosition.getRow() + turnPosition.getCol()) == (field.getRows() - 1))) {
+            if (checkDiagonals(field, turnPosition)) {
+                return turn.getPlayer().isAiTurn() ? GameResult.AI_WON : GameResult.PLAYER_WON;
+            }
+        }
+        if (turns.size() == (field.getRows() * field.getCols())) {
+            return GameResult.DRAW;
+        }
+        return GameResult.PROCESSING;
+    }
+
+    @Override
+    public boolean validateField(Game game) {
+        List<Turn> turns = game.getTurns();
+        Field field = game.getField();
+        Field restoredField = new Field();
+        for (Turn turn: turns) {
+            restoredField.setFieldValue(turn.getPosition(), turn.getPlayer().isAiTurn() ? aiTurn : playerTurn);
+        }
+        for (int i = 0; i < field.getRows(); i++) {
+            for (int j = 0; j < field.getCols(); j++) {
+                FieldPosition pos = new FieldPosition(i, j);
+                if (field.getFieldValue(pos) != restoredField.getFieldValue(pos)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    private boolean checkHorizontal(Field field, FieldPosition position) {
+        int row = position.getRow();
+        int horizontalStartValue = field.getFieldValue(new FieldPosition(row, 0));
+
+        if (horizontalStartValue == emptyCell) {
+            return false;
+        }
+
+        for (int col = 1; col < field.getCols(); col++) {
+            if (horizontalStartValue != field.getFieldValue(new FieldPosition(row, col))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean checkVertical(Field field, FieldPosition position) {
+        int col = position.getCol();
+        int verticalStartValue = field.getFieldValue(new FieldPosition(0, col));
+
+        if (verticalStartValue == emptyCell) {
+            return false;
+        }
+
+        for (int row = 1; row < field.getRows(); row++) {
+            if (verticalStartValue != field.getFieldValue(new FieldPosition(row, col))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean checkDiagonals(Field field, FieldPosition position) {
+        int startMainDiagonalValue = field.getFieldValue(new FieldPosition(0,0));
+        int startSecondaryDiagonalValue = field.getFieldValue(new FieldPosition(0, field.getCols() - 1));
+
+        boolean resMain = true;
+        boolean resSecondary = true;
+
+        if (startMainDiagonalValue == emptyCell) {
+            resMain = false;
+        } else {
+            for (int i = 1; i < field.getRows(); i++) {
+                if (startMainDiagonalValue != field.getFieldValue(new FieldPosition(i, i))) {
+                    resMain = false;
+                    break;
+                }
+            }
+        }
+        if (startSecondaryDiagonalValue == emptyCell) {
+            resSecondary = false;
+        } else {
+            for (int j = 1; j < field.getRows(); j++) {
+                if (startSecondaryDiagonalValue != field.getFieldValue(new FieldPosition(j, field.getRows() - 1 - j))) {
+                    resSecondary = false;
+                    break;
+                }
+            }
+        }
+
+        return (resMain || resSecondary);
+    }
+
+
+    private int minMax(Game game, int depth) {
+        GameResult result = checkGameEnd(game);
+        Field field = game.getField();
+        switch (result) {
+            case AI_WON -> {
+                return 10 - depth;
+            }
+            case PLAYER_WON -> {
+                return  -10 + depth;
+            }
+            case DRAW -> {
+                return 0;
+            }
+            case PROCESSING -> {
+                boolean isAiTurn = game.getTurnOrder().isAiTurn();
+                int bestScore = isAiTurn ? Integer.MIN_VALUE : Integer.MAX_VALUE;
+
+                for (int i = 0; i < field.getRows(); i++) {
+                    for (int j = 0; j < field.getCols(); j++) {
+                        FieldPosition currPos = new FieldPosition(i, j);
+                        if (field.getFieldValue(currPos) == emptyCell) {
+                            Game simulatedGame = simulateTurn(game, currPos, game.getTurnOrder());
+                            int rating = minMax(simulatedGame, depth + 1);
+                            bestScore = isAiTurn ? Math.max(rating, bestScore) : Math.min(rating, bestScore);
+                        }
+                    }
+                }
+                return bestScore;
+            }
+        }
+        throw new IllegalStateException("Minimax reached unreachable state for game: " + game.getGameId());
+    }
+
+
+    private Game simulateTurn(Game game, FieldPosition posOfTurn, PlayerEnum player) {
+        boolean isAiTurn = player.isAiTurn();
+        Turn newTurn = new Turn(posOfTurn, player);
+        if (game.getTurnOrder() != newTurn.getPlayer()) {
+            throw new IllegalStateException("Wrong player's turn.");
+        }
+        Field newField = Field.getFieldCopy(game.getField());
+        List<Turn> turns = new ArrayList<>(game.getTurns());
+        turns.add(newTurn);
+        newField.setFieldValue(posOfTurn, isAiTurn ? 2: 1);
+        PlayerEnum turn = isAiTurn ? PlayerEnum.PLAYER : PlayerEnum.AI;
+        return new Game(
+                game.getGameId(),
+                newField,
+                turns,
+                turn,
+                game.getResult()
+        );
+    }
+
+    private Game finalizeGame(Game game, GameResult result) {
+        return new Game(
+                game.getGameId(),
+                game.getField(),
+                game.getTurns(),
+                game.getTurnOrder(),
+                result
+        );
+    }
+}package tictactoe.domain.service;
+
+
+import tictactoe.domain.model.Game;
+import tictactoe.domain.model.GameResult;
+import tictactoe.domain.model.Turn;
+
+public interface GameInterface {
+
+    Turn getNextTurn(Game game);
+
+    boolean validateField(Game game);
+
+    GameResult checkGameEnd(Game game);
+}package tictactoe.domain.service;
+
+
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import tictactoe.datasource.model.UserEntity;
+import tictactoe.domain.model.User;
+import tictactoe.web.mapper.UserRequestMapper;
+import tictactoe.web.model.SignUpRequest;
+
+import java.util.Base64;
+import java.util.Optional;
+import java.util.UUID;
+
+
+public class AuthService {
+    private final PasswordEncoder passwordEncoder;
+    private final UserService userService;
+
+    public AuthService(PasswordEncoder passwordEncoder, UserService userService) {
+        this.passwordEncoder = passwordEncoder;
+        this.userService = userService;
+    }
+
+    private String GetHashPassword(String password) {
+        return passwordEncoder.encode(password);
+    }
+
+    public boolean signUpUser(SignUpRequest credentials) {
+        try {
+            User user = UserRequestMapper.toUser(credentials);
+            String hashPassword = GetHashPassword(credentials.getPassword());
+            return userService.createUser(user, hashPassword);
+        } catch (DataIntegrityViolationException e) {
+            return false;
+        }
+    }
+
+    public UUID signInUser(String base64Credentials) {
+        String[] credentials = decodeCredentials(base64Credentials);
+        String login = credentials[0];
+        String password = credentials[1];
+        Optional<UserEntity> optionalEntity = userService.getUser(login);
+        if (optionalEntity.isPresent() && passwordEncoder.matches(password, optionalEntity.get().getHashedPassword())) {
+            return optionalEntity.get().getUserId();
+        }
+        throw new BadCredentialsException("Invalid login or password");
+    }
+
+    public static String[] decodeCredentials(String authHeader){
+        if (authHeader == null || !authHeader.startsWith("Basic ")) {
+            throw new BadCredentialsException("Invalid credentials format");
+        }
+        String base64Credentials = authHeader.substring(6);
+        byte[] decodedData = Base64.getDecoder().decode(base64Credentials);
+        String data = new String(decodedData);
+        String[] credentials = data.split(":");
+        if (credentials.length != 2 || credentials[0].isBlank() || credentials[1].isBlank()) {
+            throw new BadCredentialsException("Invalid credentials format");
+        }
+        return  credentials;
+    }
+
+
+}
+package tictactoe.domain.service;
+
+import tictactoe.datasource.mapper.UserMapper;
+import tictactoe.datasource.model.UserEntity;
+import tictactoe.datasource.repository.UserRepository;
+import tictactoe.domain.model.User;
+
+import java.util.Optional;
+
+public class UserService implements UserInterface{
+    private UserRepository userRepository;
+
+    public UserService(UserRepository userRepository) {
+        this.userRepository = userRepository;
+    }
+
+    @Override
+    public boolean createUser(User user, String hashPassword) {
+        UserEntity newUser = UserMapper.toEntity(user, hashPassword);
+        userRepository.save(newUser);
+        return true;
+    }
+
+    @Override
+    public Optional<UserEntity> getUser(String login) {
+        return userRepository.findByLogin(login);
+    }
+
+}
+package tictactoe.datasource.model;
+
+import jakarta.persistence.*;
+import lombok.*;
+import tictactoe.domain.model.*;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
+
+
+@Entity
+@Table(name = "games")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class GameEntity {
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID gameId;
+
+    @Column(name = "field_state", nullable = false, length = 9)
+    @Builder.Default
+    private String fieldState = "000000000";
+
+    @OneToMany(mappedBy = "game", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    private List<TurnEntity> turnsHistory = new ArrayList<>();
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "current_player", nullable = false)
+    private PlayerEnum currentPlayer;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "result", nullable = false)
+    private GameResult result;
+
+}package tictactoe.datasource.model;
+
+import jakarta.persistence.*;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import lombok.*;
+
+
+
+import java.util.UUID;
+
+@Entity
+@Table(name = "turns")
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+@Getter
+@Setter
+public class TurnEntity {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long turnId;
+
+    @Column(name="turn_row", nullable = false)
+    private int row;
+
+    @Column(name="turn_col", nullable = false)
+    private int col;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "player", nullable = false)
+    private PlayerEnum player;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "game_id", nullable = false)
+    private GameEntity game;
+
+}
+package tictactoe.datasource.model;
+
+
+import jakarta.persistence.*;
+import lombok.*;
+
+import java.util.UUID;
+
+@Entity
+@Table(name = "users")
+@AllArgsConstructor
+@NoArgsConstructor
+@Getter
+@Setter
+public class UserEntity {
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID userId;
+
+    @Column(name = "login", nullable = false, unique = true)
+    private String login;
+
+    @Column(name = "password_hash", nullable = false)
+    private String hashedPassword;
+}
+package tictactoe.datasource.service;
+
+
+import org.springframework.transaction.annotation.Transactional;
+
+import tictactoe.datasource.mapper.GameMapper;
+import tictactoe.datasource.model.GameEntity;
+import tictactoe.datasource.repository.GameRepository;
+import tictactoe.datasource.repository.UserRepository;
+import tictactoe.domain.model.Game;
+
+import java.util.*;
+import java.util.stream.StreamSupport;
+
+public class GameRepositoryService {
+    private final GameRepository gameRepository;
+
+    public GameRepositoryService(GameRepository gameRepository) {
+        this.gameRepository = gameRepository;
+    }
+
+    @Transactional
+    public Game saveOrUpdateGame(Game game) {
+        if (game.getGameId() == null) {
+            GameEntity entity = GameMapper.toEntity(game);
+            gameRepository.save(entity);
+            return GameMapper.toGame(entity);
+        } else {
+            GameEntity entity = gameRepository.findById(game.getGameId()).orElseThrow(
+                    () -> new NoSuchElementException("Game not found")
+            );
+            GameMapper.updateEntity(entity, game);
+            gameRepository.save(entity);
+            return GameMapper.toGame(entity);
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public Game getGameById(UUID gameId) {
+        Optional<GameEntity> game = gameRepository.findById(gameId);
+        if (game.isPresent()) {
+            GameEntity entity = game.get();
+            return GameMapper.toGame(entity);
+        }
+        throw new NoSuchElementException(String.format("Game with ID %s not found", gameId.toString()));
+    }
+
+    @Transactional(readOnly = true)
+    public List<Game> getAllGames() {
+        return StreamSupport.stream(gameRepository.findAll()
+                .spliterator(), false)
+                .map(GameMapper::toGame)
+                .toList();
+
+    }
+}
+package tictactoe.datasource.mapper;
+
+import tictactoe.datasource.model.UserEntity;
+import tictactoe.domain.model.User;
+
+public class UserMapper {
+    public static UserEntity toEntity(User user, String hashPassword) {
+        UserEntity entity = new UserEntity();
+        entity.setLogin(user.getLogin());
+        entity.setHashedPassword(hashPassword);
+        return entity;
+    }
+
+    public static User toUser(UserEntity entity) {
+        User user = new User();
+        user.setUserId(entity.getUserId());
+        user.setLogin(entity.getLogin());
+        return user;
+    }
+}
+package tictactoe.datasource.mapper;
+
+import tictactoe.datasource.model.GameEntity;
+import tictactoe.datasource.model.TurnEntity;
+import tictactoe.domain.model.Field;
+import tictactoe.domain.model.FieldPosition;
+import tictactoe.domain.model.Game;
+import tictactoe.domain.model.Turn;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
+public class GameMapper {
+
+    public static Game toGame(GameEntity entity) {
+        return new Game(
+                entity.getGameId(),
+                getFieldFromEntity(entity),
+                getTurnsFromEntity(entity),
+                entity.getCurrentPlayer(),
+                entity.getResult()
+        );
+    }
+
+    public static GameEntity toEntity(Game game) {
+        GameEntity entity = new GameEntity();
+        if (game.getGameId() != null) {
+            entity.setGameId(game.getGameId());
+        }
+
+        entity.setFieldState(getFieldStateFromGame(game));
+        entity.setCurrentPlayer(game.getTurnOrder());
+        entity.setResult(game.getResult());
+        entity.setTurnsHistory(getTurnsFromGame(game, entity));
+        return entity;
+    }
+
+    public static void updateEntity(GameEntity entity, Game game) {
+        entity.setFieldState(getFieldStateFromGame(game));
+        entity.setResult(game.getResult());
+        entity.setCurrentPlayer(game.getTurnOrder());
+        List<TurnEntity> existingTurns = entity.getTurnsHistory();
+        List<Turn> domainTurns = game.getTurns();
+        if (existingTurns.size() < domainTurns.size()) {
+            for (int i = existingTurns.size(); i < domainTurns.size(); i++) {
+                Turn domainTurn = domainTurns.get(i);
+                TurnEntity newTurn = TurnEntity.builder()
+                        .row(domainTurn.getPosition().getRow())
+                        .col(domainTurn.getPosition().getCol())
+                        .player(domainTurn.getPlayer())
+                        .game(entity)
+                        .build();
+                existingTurns.add(newTurn);
+            }
+        }
+    }
+
+    private static Field getFieldFromEntity(GameEntity entity) {
+        String fieldState = entity.getFieldState();
+        Field gameField = new Field();
+
+        for (int i = 0; i < fieldState.length(); i++) {
+            char cell = fieldState.charAt(i);
+            int cellValue = cell - '0';
+            FieldPosition pos = new FieldPosition(i / gameField.getRows(), i % gameField.getCols());
+            gameField.setFieldValue(pos, cellValue);
+        }
+        return gameField;
+    }
+
+    private static List<Turn> getTurnsFromEntity(GameEntity entity) {
+        List<Turn> turns = new ArrayList<>();
+        List<TurnEntity> turnsHistory = entity.getTurnsHistory();
+        for (TurnEntity turn: turnsHistory) {
+            FieldPosition pos = new FieldPosition(turn.getRow(), turn.getCol());
+            turns.add(new Turn(pos, turn.getPlayer()));
+        }
+        return turns;
+    }
+
+    private static String getFieldStateFromGame(Game game) {
+        StringBuilder fieldState = new StringBuilder();
+        Field field = game.getField();
+        int[][] matrix = field.getFieldMatrix();
+        for (int i = 0; i < field.getRows(); i++) {
+            StringBuilder row = new StringBuilder();
+            for (int j = 0; j < field.getCols(); j++) {
+                row.append(matrix[i][j]);
+            }
+            fieldState.append(row.toString());
+        }
+        return fieldState.toString();
+    }
+
+    private static List<TurnEntity> getTurnsFromGame(Game game, GameEntity entity) {
+        List<TurnEntity> turnEntities = new ArrayList<>();
+        for (Turn turn : game.getTurns()) {
+            TurnEntity turnEntity = TurnEntity.builder()
+                    .row(turn.getPosition().getRow())
+                    .col(turn.getPosition().getCol())
+                    .player(turn.getPlayer())
+                    .game(entity)
+                    .build();
+            turnEntities.add(turnEntity);
+        }
+
+        return turnEntities;
+    }
+
+
+}
+package tictactoe.datasource.repository;
+
+
+import org.springframework.data.repository.CrudRepository;
+import org.springframework.stereotype.Repository;
+
+import tictactoe.datasource.model.GameEntity;
+
+
+import java.util.UUID;
+
+@Repository
+public interface GameRepository extends CrudRepository<GameEntity, UUID> {
+
+}
+package tictactoe.datasource.repository;
+
+import org.springframework.data.repository.CrudRepository;
+import org.springframework.stereotype.Repository;
+import tictactoe.datasource.model.UserEntity;
+
+import java.util.Optional;
+import java.util.UUID;
+
+@Repository
+public interface UserRepository extends CrudRepository<UserEntity, UUID> {
+    Optional<UserEntity> findByLogin(String login);
+}
+package tictactoe.di;
+
+
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import tictactoe.datasource.repository.GameRepository;
+import tictactoe.datasource.repository.UserRepository;
+import tictactoe.domain.model.AuthFilter;
+import tictactoe.domain.service.AuthService;
+import tictactoe.domain.service.GameService;
+import tictactoe.datasource.service.GameRepositoryService;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import tictactoe.domain.service.UserService;
+
+import java.util.List;
+
+@Configuration
+public class SpringConfiguration {
+
+    @Bean
+    public GameRepositoryService repositoryService(GameRepository gameRepository) {
+        return new GameRepositoryService(gameRepository);
+    }
+
+    @Bean
+    public GameService gameService(GameRepositoryService repositoryService) {
+        return new GameService(repositoryService);
+    }
+
+    @Bean
+    public UserService userService(UserRepository userRepository) {
+        return new UserService(userRepository);
+    }
+
+
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    public AuthService authService(PasswordEncoder passwordEncoder, UserService userService) {
+        return new AuthService(passwordEncoder, userService);
+    }
+
+    @Bean
+    public AuthFilter authFilter(PasswordEncoder passwordEncoder, AuthService authService) {
+        return new AuthFilter(authService, passwordEncoder);
+    }
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http, AuthFilter authFilter) throws Exception {
+        http
+            .csrf(csrf -> csrf.disable())
+            .authorizeHttpRequests(auth -> auth
+            .requestMatchers("/auth/**").permitAll()
+            .anyRequest().authenticated())
+            .addFilterBefore(authFilter, UsernamePasswordAuthenticationFilter.class);
+        return http.build();
+    }
+
+
+
+
+
+}
+package tictactoe.web.model;
+
+
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import lombok.Getter;
+
+@Getter
+public class SignUpRequest {
+    @Size(min = 2, max = 32, message = "Wrong login length (2 to 32 characters long)")
+    @Pattern(regexp = "^\\S+$", message = "Spaces are not allowed")
+    private String login;
+
+    @Size(min = 8, max = 64, message = "Wrong password length (8 to 64 characters long)")
+    @Pattern(regexp = "^\\S+$", message = "Spaces are not allowed")
+    private String password;
+}
+package tictactoe.web.model;
+
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+public class TurnRequest {
+    @Min(1) @Max(3) private int row;
+    @Min(1) @Max(3) private int col;
+    private String player;
+
+    public static PlayerEnum getPlayerToDomain(TurnRequest request) {
+        if (request.getPlayer().equalsIgnoreCase("player")) {
+            return PlayerEnum.PLAYER;
+        } else if (request.getPlayer().equalsIgnoreCase("ai")) {
+            return PlayerEnum.AI;
+        } else {
+            throw new IllegalArgumentException("Unknown player");
+        }
+    }
+}
+package tictactoe.web.model;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+
+import java.time.LocalDateTime;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.UUID;
+
+
+@RestControllerAdvice
+public class WebExceptionHandler {
+
+    @ExceptionHandler(NoSuchElementException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public Map<String, Object> handleNotFound(NoSuchElementException ex) {
+        return Map.of(
+                "timestamp", LocalDateTime.now(),
+                "status", 404,
+                "error", "Not Found",
+                "message", ex.getMessage()
+        );
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Map<String, Object> handleIllegalArgument(IllegalArgumentException ex) {
+        return Map.of(
+                "timestamp", LocalDateTime.now(),
+                "status", 400,
+                "error", "Invalid data",
+                "message", ex.getMessage()
+        );
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public Map<String, Object> handleInvalidUUID(MethodArgumentTypeMismatchException ex) {
+        if (ex.getRequiredType() != null && ex.getRequiredType().equals(UUID.class)) {
+            return Map.of(
+                    "timestamp", LocalDateTime.now(),
+                    "status", 404,
+                    "error", "Not found",
+                    "message", "Game not found"
+            );
+        }
+        return Map.of(
+                "timestamp", LocalDateTime.now(),
+                "status", 400,
+                "error", "Invalid data",
+                "message", ex.getMessage()
+        );
+    }
+
+    @ExceptionHandler(IllegalStateException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public Map<String, Object> handleIllegalState(IllegalStateException ex) {
+        return Map.of(
+                "timestamp", LocalDateTime.now(),
+                "status", 409,
+                "error", "Invalid data",
+                "message", ex.getMessage()
+        );
+    }
+}
+package tictactoe.web.model;
+
+import lombok.Builder;
+import lombok.Getter;
+import tictactoe.domain.model.*;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
+
+@Builder
+@Getter
+public class WebDTO {
+    private final UUID id;
+    private final boolean isAiFirstTurn;
+    private String[][] field;
+    private String currentPlayer;
+    private List<TurnRequest> turns;
+    private String result;
+
+
+    public static String[][] getGameFieldResponse(Game game) {
+        Field field = game.getField();
+        int rows = field.getRows();
+        int cols = field.getCols();
+        int[][] fieldMatrix = field.getFieldMatrix();
+        boolean isAiCross = game.isAiFirstTurn();
+        String[][] fieldResponse = new String[rows][cols];
+        for (int i = 0; i < rows; i++) {
+            for (int j = 0; j < cols; j++) {
+                int fieldCellValue = fieldMatrix[i][j];
+                switch (fieldCellValue) {
+                    case 0 -> fieldResponse[i][j] = " ";
+                    case 1 -> fieldResponse[i][j] = isAiCross ? "O" : "X";
+                    case 2 -> fieldResponse[i][j] = isAiCross ? "X" : "O";
+                    default -> throw new IllegalArgumentException("Incorrect field value");
+                }
+            }
+        }
+        return fieldResponse;
+    }
+
+    public static List<TurnRequest> getTurnsResponse(Game game) {
+        List<Turn> gameTurns = game.getTurns();
+        List<TurnRequest> turnsResponse = new ArrayList<>();
+        for (Turn turn : gameTurns) {
+            int row = turn.getPosition().getRow() + 1;
+            int col = turn.getPosition().getCol() + 1;
+            String player = turn.getPlayer().getPlayerName();
+            turnsResponse.add(new TurnRequest(row, col, player));
+        }
+        return turnsResponse;
+    }
+
+    public static String getCurrentPlayerResponse(Game game) {
+        return game.getTurnOrder().getPlayerName();
+    }
+
+    public static String getResultResponse(Game game) {
+        return game.getResult().getResultString();
+    }
+
+    public static Field getFieldGame(WebDTO gameResponse) {
+        String[][] field = gameResponse.getField();
+        int rows = field.length;
+        int cols = field[rows - 1].length;
+        boolean isAiCross = gameResponse.isAiFirstTurn();
+        if (rows != cols) {
+            throw new IllegalArgumentException("Incorrect field size");
+        }
+        Field gameField = new Field();
+        for (int i = 0; i < rows; i++) {
+            for (int j = 0; j < cols; j++) {
+                if (field[i].length != rows) {
+                    throw new IllegalArgumentException("Incorrect field size");
+                }
+                String cell = field[i][j];
+                FieldPosition position = new FieldPosition(i, j);
+                switch (cell) {
+                    case "X" -> gameField.setFieldValue(position, isAiCross ? 2 : 1);
+                    case "O" -> gameField.setFieldValue(position, isAiCross ? 1 : 2);
+                    case " " -> gameField.setFieldValue(position, 0);
+                    default -> throw new IllegalArgumentException("Incorrect field value");
+                }
+            }
+        }
+        return gameField;
+    }
+
+    public static List<Turn> getTurnsGame(WebDTO gameResponse) {
+        List<Turn> gameTurns = new ArrayList<>();
+        List<TurnRequest> responseTurns = gameResponse.getTurns();
+        for (TurnRequest turn : responseTurns) {
+            Turn turnGame = getTurnGame(turn);
+            gameTurns.add(turnGame);
+        }
+        return gameTurns;
+    }
+
+    public static Turn getTurnGame(TurnRequest turnInfo) {
+        int row = turnInfo.getRow() - 1;
+        int col = turnInfo.getCol() - 1;
+        String playerName = turnInfo.getPlayer();
+        PlayerEnum player;
+        switch (playerName) {
+            case "Player" -> player = PlayerEnum.PLAYER;
+            case "AI" -> player = PlayerEnum.AI;
+            default -> throw new IllegalArgumentException("Incorrect turn player");
+        }
+        return new Turn(
+                new FieldPosition(row, col),
+                player
+        );
+    }
+
+
+    public static PlayerEnum getPlayerGame(WebDTO gameResponse) {
+        return switch (gameResponse.getCurrentPlayer().toLowerCase()) {
+            case "player" -> PlayerEnum.PLAYER;
+            case "ai" -> PlayerEnum.AI;
+            default -> throw new IllegalArgumentException("Incorrect player type");
+        };
+    }
+
+
+    public static GameResult getResultGame(WebDTO gameResponse) {
+        return switch (gameResponse.getResult().toLowerCase()) {
+            case "processing" -> GameResult.PROCESSING;
+            case "draw" -> GameResult.DRAW;
+            case "ai won" -> GameResult.AI_WON;
+            case "player won" -> GameResult.PLAYER_WON;
+            default -> throw new IllegalArgumentException("Incorrect result type");
+        };
+    }
+}
+package tictactoe.web.mapper;
+
+import tictactoe.domain.model.User;
+import tictactoe.web.model.SignUpRequest;
+
+public class UserRequestMapper {
+    public static User toUser(SignUpRequest credentials) {
+        return new User(credentials.getLogin());
+    }
+}
+package tictactoe.web.mapper;
+
+import tictactoe.domain.model.FieldPosition;
+import tictactoe.domain.model.Game;
+import tictactoe.domain.model.Turn;
+import tictactoe.web.model.TurnRequest;
+import tictactoe.web.model.WebDTO;
+
+
+public class WebDTOMapper {
+    public static WebDTO toResponse(Game game) {
+        return WebDTO.builder()
+                .id(game.getGameId())
+                .isAiFirstTurn(game.isAiFirstTurn())
+                .field(WebDTO.getGameFieldResponse(game))
+                .turns(WebDTO.getTurnsResponse(game))
+                .currentPlayer(WebDTO.getCurrentPlayerResponse(game))
+                .result(WebDTO.getResultResponse(game))
+                .build();
+    }
+
+    public static Game toGame(WebDTO gameResponse) {
+        return new Game(
+                gameResponse.getId(),
+                WebDTO.getFieldGame(gameResponse),
+                WebDTO.getTurnsGame(gameResponse),
+                WebDTO.getPlayerGame(gameResponse),
+                WebDTO.getResultGame(gameResponse)
+        );
+    }
+
+    public static Turn toTurnGame(TurnRequest request) {
+        return new Turn(
+                new FieldPosition(request.getRow() - 1, request.getCol() - 1),
+                TurnRequest.getPlayerToDomain(request)
+        );
+    }
+
+    public static TurnRequest toTurnRequest(Turn turn) {
+        return new TurnRequest(
+                turn.getPosition().getRow() + 1,
+                turn.getPosition().getCol() + 1,
+                turn.getPlayer().getPlayerName()
+        );
+    }
+}
+package tictactoe.web.controller;
+
+
+import tictactoe.domain.model.Game;
+import tictactoe.domain.model.Turn;
+
+import tictactoe.domain.service.GameService;
+import tictactoe.datasource.service.GameRepositoryService;
+import org.springframework.web.bind.annotation.*;
+import tictactoe.web.mapper.WebDTOMapper;
+import tictactoe.web.model.TurnRequest;
+import tictactoe.web.model.WebDTO;
+
+import java.util.List;
+
+import java.util.UUID;
+
+
+@RestController
+@RequestMapping("/game")
+@CrossOrigin(origins = "*")
+public class GameController {
+    private final GameService gameService;
+
+    public GameController(GameRepositoryService repositoryService, GameService gameService) {
+        this.repositoryService = repositoryService;
+        this.gameService = gameService;
+    }
+
+    @PostMapping("/create")
+    public WebDTO createGame() {
+        return gameService.createGame();
+
+    }
+
+    @GetMapping("/{gameId}")
+    public WebDTO getGame(@PathVariable("gameId") UUID id) {
+        return gameService.getGame(id);
+    }
+
+    @PostMapping("/{gameId}/move")
+    public WebDTO makeMove(@PathVariable("gameId") UUID id, @RequestBody TurnRequest request) {
+        return gameService.makeTurn(id, request);
+    }
+
+    @GetMapping("/all")
+    public List<WebDTO> getAllGames() {
+        return gameService.getAllGames();
+    }
+}
+package tictactoe.web.controller;
+
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import tictactoe.domain.service.AuthService;
+import tictactoe.web.model.SignUpRequest;
+
+
+import javax.naming.AuthenticationException;
+import java.util.UUID;
+
+@RestController
+@RequestMapping("/auth")
+@CrossOrigin(origins = "*")
+public class AuthController {
+    private AuthService authService;
+
+    public AuthController(AuthService authService) {
+        this.authService = authService;
+    }
+
+
+    @PostMapping("signup")
+    public ResponseEntity<String> signUp(@RequestBody SignUpRequest credentials) {
+        boolean registrationStatus = authService.signUpUser(credentials);
+        if (!registrationStatus) {
+            return ResponseEntity.status(409).body("Registration failed!");
+        }
+        return ResponseEntity.status(201).body("Success!");
+    }
+
+
+    @PostMapping("login")
+    public UUID signIn(@RequestHeader("Authorization") String authHeader) throws AuthenticationException {
+        return authService.signInUser(authHeader);
+    }
+}
+package tictactoe;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class Application {
+    public static void main(String[] args) {
+        SpringApplication.run(Application.class, args);
+    }
+}package tictactoe.domain.model;
+
+import lombok.Getter;
+
+@Getter
+public enum GameResult {
+    AI_WON("AI won"),
+    PLAYER_WON("Player won"),
+    DRAW("Draw"),
+    PROCESSING("Processing");
+
+    String resultString;
+
+    GameResult(String result) {
+        this.resultString = result;
+    }
+
+}
+package tictactoe.domain.model;
+
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.ServletRequest;
+import jakarta.servlet.ServletResponse;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.filter.GenericFilterBean;
+import tictactoe.domain.service.AuthService;
+
+import java.io.IOException;
+import java.util.Collections;
+import java.util.UUID;
+
+
+public class AuthFilter extends GenericFilterBean {
+    AuthService authService;
+    PasswordEncoder passwordEncoder;
+
+    public AuthFilter(AuthService authService, PasswordEncoder passwordEncoder) {
+        this.authService = authService;
+        this.passwordEncoder = passwordEncoder;
+    }
+
+    @Override
+    public void doFilter(ServletRequest request, ServletResponse response, FilterChain filterChain) throws IOException, ServletException {
+        HttpServletRequest mappedRequest = (HttpServletRequest) request;
+        HttpServletResponse mappedResponse = (HttpServletResponse) response;
+        String path = mappedRequest.getRequestURI();
+
+        if ("OPTIONS".equalsIgnoreCase(mappedRequest.getMethod())) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        if (path.startsWith("/auth/")) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        try {
+            String headerAuthString = mappedRequest.getHeader("Authorization");
+            UUID userId = authService.signInUser(headerAuthString);
+            UsernamePasswordAuthenticationToken authentication =
+                    new UsernamePasswordAuthenticationToken(userId, null, Collections.emptyList());
+            SecurityContextHolder.getContext().setAuthentication(authentication);
+            filterChain.doFilter(request, response);
+        } catch (BadCredentialsException e) {
+            mappedResponse.sendError(401, e.getMessage());
+        }
+    }
+}
+package tictactoe.domain.model;
+
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+
+@Getter
+@AllArgsConstructor
+public class FieldPosition {
+    private int row;
+    private int col;
+}package tictactoe.domain.model;
+
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+import java.util.Optional;
+import java.util.UUID;
+
+@Setter
+@Getter
+@NoArgsConstructor
+public class User {
+    private UUID userId;
+    private String login;
+
+    public User(String login) {
+        this.userId = null;
+        this.login = login;
+    }
+
+
+    public Optional<UUID> getUserId() {
+        return Optional.ofNullable(this.userId);
+    }
+}
+package tictactoe.domain.model;
+
+import lombok.Builder;
+import lombok.Getter;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.UUID;
+
+
+
+@Getter
+public class Game {
+    private final UUID gameId;
+    private final Field field;
+    private final List<Turn> turns;
+    private PlayerEnum turnOrder;
+    private GameResult result;
+
+    public Game() {
+        this.gameId = null;
+        this.field = new Field();
+        this.turns = new ArrayList<>();
+        this.turnOrder = PlayerEnum.getRandomTurnOrder();
+        this.result = GameResult.PROCESSING;
+    }
+
+    public Game(UUID gameId, Field field, List<Turn> turns, PlayerEnum turnOrder, GameResult result) {
+        this.gameId = gameId;
+        this.field = field;
+        this.turns = turns != null ? new ArrayList<>(turns) : new ArrayList<>();
+        this.turnOrder = turnOrder;
+        this.result = result;
+    }
+
+    public List<Turn> getTurns() {
+        return Collections.unmodifiableList(turns);
+    }
+
+    public boolean isAiFirstTurn() {
+        if (this.turns.isEmpty()) {
+            return this.turnOrder.isAiTurn();
+        }
+        return this.turns.getFirst().getPlayer().isAiTurn();
+    }
+
+
+}package tictactoe.domain.model;
+
+import lombok.Getter;
+
+import java.util.concurrent.ThreadLocalRandom;
+
+@Getter
+public enum PlayerEnum{
+    PLAYER(false, "Player"),
+    AI(true, "AI");
+
+    boolean isAiTurn;
+    String playerName;
+
+    PlayerEnum(boolean isAiTurn, String playerName) {
+        this.isAiTurn = isAiTurn;
+        this.playerName = playerName;
+    }
+
+    public static PlayerEnum getRandomTurnOrder() {
+        return values()[ThreadLocalRandom.current().nextInt(values().length)];
+    }
+
+}
+package tictactoe.domain.model;
+
+import lombok.Builder;
+import lombok.Getter;
+
+@Getter
+public class Field {
+    private static final int rows = 3;
+    private static final  int cols = 3;
+    private final int[][] fieldMatrix;
+
+    public Field() {
+        this.fieldMatrix = new int[rows][cols];
+    }
+
+    public int getRows() {
+        return rows;
+    }
+
+    public int getCols() {
+        return cols;
+    }
+
+
+    public int[][] getFieldMatrix() {
+        int[][] fieldCopy = new int[rows][cols];
+        for (int i = 0; i < this.rows; i++) {
+            System.arraycopy(fieldMatrix[i], 0, fieldCopy[i], 0, this.cols);
+        }
+        return fieldCopy;
+    }
+
+    public static Field getFieldCopy(Field original) {
+        Field copy = new Field();
+        int[][] src = original.getFieldMatrix();
+        for (int i = 0; i < original.getRows(); i++) {
+            System.arraycopy(src[i], 0, copy.fieldMatrix[i], 0, original.getCols());
+        }
+        return copy;
+    }
+
+
+    public boolean setFieldValue(FieldPosition turnPos, int turn) {
+        int row = turnPos.getRow();
+        int col = turnPos.getCol();
+        if (row > rows - 1 || row < 0 || col > cols - 1 || col < 0) {
+            return false;
+        }
+        if (this.fieldMatrix[row][col] != 0) {
+            return false;
+        }
+        if (turn < 1 || turn > 2) {
+            return false;
+        }
+        this.fieldMatrix[row][col] = turn;
+        return true;
+    }
+
+    public int getFieldValue(FieldPosition position) {
+        int row = position.getRow();
+        int col = position.getCol();
+        if (row > rows - 1 || row < 0 || col > cols - 1 || col < 0) {
+            throw new IllegalArgumentException(
+                    String.format("Incorrect coordinates [%d %d]. Range: row [0-%d], col[0-%d]",
+                            row,
+                            col,
+                            this.rows - 1,
+                            this.cols - 1)
+            );
+        }
+        return fieldMatrix[position.getRow()][position.getCol()];
+    }
+}package tictactoe.domain.model;
+
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+
+@AllArgsConstructor
+@Getter
+public class Turn {
+    private FieldPosition position;
+    private PlayerEnum player;
+}
+package tictactoe.domain.service;
+
+import tictactoe.datasource.model.UserEntity;
+import tictactoe.domain.model.User;
+
+import java.util.Optional;
+
+public interface UserInterface {
+    public boolean createUser(User user, String hashPassword);
+
+    public Optional<UserEntity> getUser(String login);
+}
+package tictactoe.domain.service;
+
+import jakarta.transaction.Transactional;
+import tictactoe.datasource.service.GameRepositoryService;
+import tictactoe.domain.model.*;
+import tictactoe.web.mapper.WebDTOMapper;
+import tictactoe.web.model.TurnRequest;
+import tictactoe.web.model.WebDTO;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
+
+public class GameService implements GameInterface {
+    GameRepositoryService repositoryService;
+
+    public GameService(GameRepositoryService repositoryService) {
+        this.repositoryService = repositoryService;
+    }
+
+    private final int emptyCell = 0;
+    private final int playerTurn = 1;
+    private final int aiTurn = 2;
+
+
+    @Transactional
+    public WebDTO createGame() {
+        Game game = firstAiTurn(new Game());
+        return WebDTOMapper.toResponse(repositoryService.saveOrUpdateGame(game));
+    }
+
+    public Game firstAiTurn(Game game) {
+        if (game.getTurnOrder() == PlayerEnum.AI) {
+            Turn aiTurn = getNextTurn(game);
+            return processAndCheckTurn(game, aiTurn);
+        }
+        return game;
+    }
+
+    public WebDTO getGame(UUID id) {
+       Game game = repositoryService.getGameById(id);
+       return WebDTOMapper.toResponse(game);
+    }
+
+    public List<WebDTO> getAllGames(){
+        List<Game> allGames = repositoryService.getAllGames();
+        return allGames.stream().map(WebDTOMapper::toResponse).toList();
+    }
+
+    @Transactional
+    public WebDTO makeTurn(UUID id, TurnRequest turnRequest) {
+        Game game = repositoryService.getGameById(id);
+        Turn turn = WebDTOMapper.toTurnGame(turnRequest);
+        if (game.getResult() != GameResult.PROCESSING) {
+            throw new IllegalStateException("This game is finished: " + game.getResult().getResultString());
+        }
+
+        if (game.getTurnOrder() != PlayerEnum.PLAYER) {
+            throw  new IllegalStateException("It's not your turn to move right now.");
+        }
+
+        if (!isValidMove(game.getField(), turn)) {
+            throw new IllegalArgumentException("Incorrect turn. Try again.");
+        }
+
+        Game gameWithPlayerTurn = repositoryService.saveOrUpdateGame(processAndCheckTurn(game, turn));
+        if (gameWithPlayerTurn.getResult() != GameResult.PROCESSING) {
+            return WebDTOMapper.toResponse(gameWithPlayerTurn);
+        }
+
+        Turn aiTurn = getNextTurn(gameWithPlayerTurn);
+        Game newTurnGame = repositoryService.saveOrUpdateGame(processAndCheckTurn(gameWithPlayerTurn, aiTurn));
+        return WebDTOMapper.toResponse(newTurnGame);
+
+    }
+
+    private Game processAndCheckTurn(Game currentGame, Turn turn) {
+        GameResult beforeResult = checkGameEnd(currentGame);
+        if (beforeResult != GameResult.PROCESSING) {
+            return finalizeGame(currentGame, beforeResult);
+        }
+        FieldPosition pos = turn.getPosition();
+        PlayerEnum player = turn.getPlayer();
+        Game nextGame = simulateTurn(currentGame, pos, player);
+        GameResult result = checkGameEnd(nextGame);
+        return (result != GameResult.PROCESSING) ? finalizeGame(nextGame, result) : nextGame;
+    }
+
+    public boolean isValidMove(Field field, Turn turn) {
+        FieldPosition position = turn.getPosition();
+        return (field.getFieldValue(position) == 0);
+    }
+
+    @Override
+    public Turn getNextTurn(Game game) {
+        int bestScore = Integer.MIN_VALUE;
+        Field field = game.getField();
+        List<Turn> bestTurns = new ArrayList<>();
+
+        for (int i = 0; i < field.getRows(); i++) {
+            for (int j = 0; j < field.getCols(); j++) {
+
+                FieldPosition currentPosition = new FieldPosition(i, j);
+                if (field.getFieldValue(new FieldPosition(i, j)) == emptyCell) {
+
+                    Game newGame = simulateTurn(game, currentPosition, game.getTurnOrder());
+                    Turn possibleTurn = newGame.getTurns().getLast();
+                    int rating = minMax(newGame, 0);
+
+                    if (rating > bestScore) {
+                        bestScore = rating;
+                        bestTurns.clear();
+                        bestTurns.add(possibleTurn);
+
+                    } else if (rating == bestScore) {
+                        bestTurns.add(possibleTurn);
+                    }
+                }
+            }
+        }
+        if (bestTurns.isEmpty()) {
+            throw new IllegalStateException("No moves available");
+        }
+        return bestTurns.get(ThreadLocalRandom.current().nextInt(bestTurns.size()));
+    }
+
+    @Override
+    public GameResult checkGameEnd(Game game) {
+        Field field = game.getField();
+        List<Turn> turns = game.getTurns();
+        if (turns.isEmpty()) {
+            return GameResult.PROCESSING;
+        }
+        if (game.getResult() != GameResult.PROCESSING) {
+            return game.getResult();
+        }
+
+        Turn turn = turns.getLast();
+        FieldPosition turnPosition = turn.getPosition();
+        boolean resHorizontal = checkHorizontal(field, turnPosition);
+        if (resHorizontal) {
+            return turn.getPlayer().isAiTurn() ? GameResult.AI_WON : GameResult.PLAYER_WON;
+        }
+        boolean resVertical = checkVertical(field, turnPosition);
+        if (resVertical) {
+            return turn.getPlayer().isAiTurn() ? GameResult.AI_WON : GameResult.PLAYER_WON;
+        }
+        if ((turnPosition.getCol() == turnPosition.getRow())
+                || ((turnPosition.getRow() + turnPosition.getCol()) == (field.getRows() - 1))) {
+            if (checkDiagonals(field, turnPosition)) {
+                return turn.getPlayer().isAiTurn() ? GameResult.AI_WON : GameResult.PLAYER_WON;
+            }
+        }
+        if (turns.size() == (field.getRows() * field.getCols())) {
+            return GameResult.DRAW;
+        }
+        return GameResult.PROCESSING;
+    }
+
+    @Override
+    public boolean validateField(Game game) {
+        List<Turn> turns = game.getTurns();
+        Field field = game.getField();
+        Field restoredField = new Field();
+        for (Turn turn: turns) {
+            restoredField.setFieldValue(turn.getPosition(), turn.getPlayer().isAiTurn() ? aiTurn : playerTurn);
+        }
+        for (int i = 0; i < field.getRows(); i++) {
+            for (int j = 0; j < field.getCols(); j++) {
+                FieldPosition pos = new FieldPosition(i, j);
+                if (field.getFieldValue(pos) != restoredField.getFieldValue(pos)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    private boolean checkHorizontal(Field field, FieldPosition position) {
+        int row = position.getRow();
+        int horizontalStartValue = field.getFieldValue(new FieldPosition(row, 0));
+
+        if (horizontalStartValue == emptyCell) {
+            return false;
+        }
+
+        for (int col = 1; col < field.getCols(); col++) {
+            if (horizontalStartValue != field.getFieldValue(new FieldPosition(row, col))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean checkVertical(Field field, FieldPosition position) {
+        int col = position.getCol();
+        int verticalStartValue = field.getFieldValue(new FieldPosition(0, col));
+
+        if (verticalStartValue == emptyCell) {
+            return false;
+        }
+
+        for (int row = 1; row < field.getRows(); row++) {
+            if (verticalStartValue != field.getFieldValue(new FieldPosition(row, col))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean checkDiagonals(Field field, FieldPosition position) {
+        int startMainDiagonalValue = field.getFieldValue(new FieldPosition(0,0));
+        int startSecondaryDiagonalValue = field.getFieldValue(new FieldPosition(0, field.getCols() - 1));
+
+        boolean resMain = true;
+        boolean resSecondary = true;
+
+        if (startMainDiagonalValue == emptyCell) {
+            resMain = false;
+        } else {
+            for (int i = 1; i < field.getRows(); i++) {
+                if (startMainDiagonalValue != field.getFieldValue(new FieldPosition(i, i))) {
+                    resMain = false;
+                    break;
+                }
+            }
+        }
+        if (startSecondaryDiagonalValue == emptyCell) {
+            resSecondary = false;
+        } else {
+            for (int j = 1; j < field.getRows(); j++) {
+                if (startSecondaryDiagonalValue != field.getFieldValue(new FieldPosition(j, field.getRows() - 1 - j))) {
+                    resSecondary = false;
+                    break;
+                }
+            }
+        }
+
+        return (resMain || resSecondary);
+    }
+
+
+    private int minMax(Game game, int depth) {
+        GameResult result = checkGameEnd(game);
+        Field field = game.getField();
+        switch (result) {
+            case AI_WON -> {
+                return 10 - depth;
+            }
+            case PLAYER_WON -> {
+                return  -10 + depth;
+            }
+            case DRAW -> {
+                return 0;
+            }
+            case PROCESSING -> {
+                boolean isAiTurn = game.getTurnOrder().isAiTurn();
+                int bestScore = isAiTurn ? Integer.MIN_VALUE : Integer.MAX_VALUE;
+
+                for (int i = 0; i < field.getRows(); i++) {
+                    for (int j = 0; j < field.getCols(); j++) {
+                        FieldPosition currPos = new FieldPosition(i, j);
+                        if (field.getFieldValue(currPos) == emptyCell) {
+                            Game simulatedGame = simulateTurn(game, currPos, game.getTurnOrder());
+                            int rating = minMax(simulatedGame, depth + 1);
+                            bestScore = isAiTurn ? Math.max(rating, bestScore) : Math.min(rating, bestScore);
+                        }
+                    }
+                }
+                return bestScore;
+            }
+        }
+        throw new IllegalStateException("Minimax reached unreachable state for game: " + game.getGameId());
+    }
+
+
+    private Game simulateTurn(Game game, FieldPosition posOfTurn, PlayerEnum player) {
+        boolean isAiTurn = player.isAiTurn();
+        Turn newTurn = new Turn(posOfTurn, player);
+        if (game.getTurnOrder() != newTurn.getPlayer()) {
+            throw new IllegalStateException("Wrong player's turn.");
+        }
+        Field newField = Field.getFieldCopy(game.getField());
+        List<Turn> turns = new ArrayList<>(game.getTurns());
+        turns.add(newTurn);
+        newField.setFieldValue(posOfTurn, isAiTurn ? 2: 1);
+        PlayerEnum turn = isAiTurn ? PlayerEnum.PLAYER : PlayerEnum.AI;
+        return new Game(
+                game.getGameId(),
+                newField,
+                turns,
+                turn,
+                game.getResult()
+        );
+    }
+
+    private Game finalizeGame(Game game, GameResult result) {
+        return new Game(
+                game.getGameId(),
+                game.getField(),
+                game.getTurns(),
+                game.getTurnOrder(),
+                result
+        );
+    }
+}package tictactoe.domain.service;
+
+
+import tictactoe.domain.model.Game;
+import tictactoe.domain.model.GameResult;
+import tictactoe.domain.model.Turn;
+
+public interface GameInterface {
+
+    Turn getNextTurn(Game game);
+
+    boolean validateField(Game game);
+
+    GameResult checkGameEnd(Game game);
+}package tictactoe.domain.service;
+
+
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import tictactoe.datasource.model.UserEntity;
+import tictactoe.domain.model.User;
+import tictactoe.web.mapper.UserRequestMapper;
+import tictactoe.web.model.SignUpRequest;
+
+import java.util.Base64;
+import java.util.Optional;
+import java.util.UUID;
+
+
+public class AuthService {
+    private final PasswordEncoder passwordEncoder;
+    private final UserService userService;
+
+    public AuthService(PasswordEncoder passwordEncoder, UserService userService) {
+        this.passwordEncoder = passwordEncoder;
+        this.userService = userService;
+    }
+
+    private String GetHashPassword(String password) {
+        return passwordEncoder.encode(password);
+    }
+
+    public boolean signUpUser(SignUpRequest credentials) {
+        try {
+            User user = UserRequestMapper.toUser(credentials);
+            String hashPassword = GetHashPassword(credentials.getPassword());
+            return userService.createUser(user, hashPassword);
+        } catch (DataIntegrityViolationException e) {
+            return false;
+        }
+    }
+
+    public UUID signInUser(String base64Credentials) {
+        String[] credentials = decodeCredentials(base64Credentials);
+        String login = credentials[0];
+        String password = credentials[1];
+        Optional<UserEntity> optionalEntity = userService.getUser(login);
+        if (optionalEntity.isPresent() && passwordEncoder.matches(password, optionalEntity.get().getHashedPassword())) {
+            return optionalEntity.get().getUserId();
+        }
+        throw new BadCredentialsException("Invalid login or password");
+    }
+
+    public static String[] decodeCredentials(String authHeader){
+        if (authHeader == null || !authHeader.startsWith("Basic ")) {
+            throw new BadCredentialsException("Invalid credentials format");
+        }
+        String base64Credentials = authHeader.substring(6);
+        byte[] decodedData = Base64.getDecoder().decode(base64Credentials);
+        String data = new String(decodedData);
+        String[] credentials = data.split(":");
+        if (credentials.length != 2 || credentials[0].isBlank() || credentials[1].isBlank()) {
+            throw new BadCredentialsException("Invalid credentials format");
+        }
+        return  credentials;
+    }
+
+
+}
+package tictactoe.domain.service;
+
+import tictactoe.datasource.mapper.UserMapper;
+import tictactoe.datasource.model.UserEntity;
+import tictactoe.datasource.repository.UserRepository;
+import tictactoe.domain.model.User;
+
+import java.util.Optional;
+
+public class UserService implements UserInterface{
+    private UserRepository userRepository;
+
+    public UserService(UserRepository userRepository) {
+        this.userRepository = userRepository;
+    }
+
+    @Override
+    public boolean createUser(User user, String hashPassword) {
+        UserEntity newUser = UserMapper.toEntity(user, hashPassword);
+        userRepository.save(newUser);
+        return true;
+    }
+
+    @Override
+    public Optional<UserEntity> getUser(String login) {
+        return userRepository.findByLogin(login);
+    }
+
+}
+package tictactoe.datasource.model;
+
+import jakarta.persistence.*;
+import lombok.*;
+import tictactoe.domain.model.*;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
+
+
+@Entity
+@Table(name = "games")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class GameEntity {
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID gameId;
+
+    @Column(name = "field_state", nullable = false, length = 9)
+    @Builder.Default
+    private String fieldState = "000000000";
+
+    @OneToMany(mappedBy = "game", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    private List<TurnEntity> turnsHistory = new ArrayList<>();
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "current_player", nullable = false)
+    private PlayerEnum currentPlayer;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "result", nullable = false)
+    private GameResult result;
+
+}package tictactoe.datasource.model;
+
+import jakarta.persistence.*;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import lombok.*;
+
+
+
+import java.util.UUID;
+
+@Entity
+@Table(name = "turns")
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+@Getter
+@Setter
+public class TurnEntity {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long turnId;
+
+    @Column(name="turn_row", nullable = false)
+    private int row;
+
+    @Column(name="turn_col", nullable = false)
+    private int col;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "player", nullable = false)
+    private PlayerEnum player;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "game_id", nullable = false)
+    private GameEntity game;
+
+}
+package tictactoe.datasource.model;
+
+
+import jakarta.persistence.*;
+import lombok.*;
+
+import java.util.UUID;
+
+@Entity
+@Table(name = "users")
+@AllArgsConstructor
+@NoArgsConstructor
+@Getter
+@Setter
+public class UserEntity {
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID userId;
+
+    @Column(name = "login", nullable = false, unique = true)
+    private String login;
+
+    @Column(name = "password_hash", nullable = false)
+    private String hashedPassword;
+}
+package tictactoe.datasource.service;
+
+
+import org.springframework.transaction.annotation.Transactional;
+
+import tictactoe.datasource.mapper.GameMapper;
+import tictactoe.datasource.model.GameEntity;
+import tictactoe.datasource.repository.GameRepository;
+import tictactoe.datasource.repository.UserRepository;
+import tictactoe.domain.model.Game;
+
+import java.util.*;
+import java.util.stream.StreamSupport;
+
+public class GameRepositoryService {
+    private final GameRepository gameRepository;
+
+    public GameRepositoryService(GameRepository gameRepository) {
+        this.gameRepository = gameRepository;
+    }
+
+    @Transactional
+    public Game saveOrUpdateGame(Game game) {
+        if (game.getGameId() == null) {
+            GameEntity entity = GameMapper.toEntity(game);
+            gameRepository.save(entity);
+            return GameMapper.toGame(entity);
+        } else {
+            GameEntity entity = gameRepository.findById(game.getGameId()).orElseThrow(
+                    () -> new NoSuchElementException("Game not found")
+            );
+            GameMapper.updateEntity(entity, game);
+            gameRepository.save(entity);
+            return GameMapper.toGame(entity);
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public Game getGameById(UUID gameId) {
+        Optional<GameEntity> game = gameRepository.findById(gameId);
+        if (game.isPresent()) {
+            GameEntity entity = game.get();
+            return GameMapper.toGame(entity);
+        }
+        throw new NoSuchElementException(String.format("Game with ID %s not found", gameId.toString()));
+    }
+
+    @Transactional(readOnly = true)
+    public List<Game> getAllGames() {
+        return StreamSupport.stream(gameRepository.findAll()
+                .spliterator(), false)
+                .map(GameMapper::toGame)
+                .toList();
+
+    }
+}
+package tictactoe.datasource.mapper;
+
+import tictactoe.datasource.model.UserEntity;
+import tictactoe.domain.model.User;
+
+public class UserMapper {
+    public static UserEntity toEntity(User user, String hashPassword) {
+        UserEntity entity = new UserEntity();
+        entity.setLogin(user.getLogin());
+        entity.setHashedPassword(hashPassword);
+        return entity;
+    }
+
+    public static User toUser(UserEntity entity) {
+        User user = new User();
+        user.setUserId(entity.getUserId());
+        user.setLogin(entity.getLogin());
+        return user;
+    }
+}
+package tictactoe.datasource.mapper;
+
+import tictactoe.datasource.model.GameEntity;
+import tictactoe.datasource.model.TurnEntity;
+import tictactoe.domain.model.Field;
+import tictactoe.domain.model.FieldPosition;
+import tictactoe.domain.model.Game;
+import tictactoe.domain.model.Turn;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
+public class GameMapper {
+
+    public static Game toGame(GameEntity entity) {
+        return new Game(
+                entity.getGameId(),
+                getFieldFromEntity(entity),
+                getTurnsFromEntity(entity),
+                entity.getCurrentPlayer(),
+                entity.getResult()
+        );
+    }
+
+    public static GameEntity toEntity(Game game) {
+        GameEntity entity = new GameEntity();
+        if (game.getGameId() != null) {
+            entity.setGameId(game.getGameId());
+        }
+
+        entity.setFieldState(getFieldStateFromGame(game));
+        entity.setCurrentPlayer(game.getTurnOrder());
+        entity.setResult(game.getResult());
+        entity.setTurnsHistory(getTurnsFromGame(game, entity));
+        return entity;
+    }
+
+    public static void updateEntity(GameEntity entity, Game game) {
+        entity.setFieldState(getFieldStateFromGame(game));
+        entity.setResult(game.getResult());
+        entity.setCurrentPlayer(game.getTurnOrder());
+        List<TurnEntity> existingTurns = entity.getTurnsHistory();
+        List<Turn> domainTurns = game.getTurns();
+        if (existingTurns.size() < domainTurns.size()) {
+            for (int i = existingTurns.size(); i < domainTurns.size(); i++) {
+                Turn domainTurn = domainTurns.get(i);
+                TurnEntity newTurn = TurnEntity.builder()
+                        .row(domainTurn.getPosition().getRow())
+                        .col(domainTurn.getPosition().getCol())
+                        .player(domainTurn.getPlayer())
+                        .game(entity)
+                        .build();
+                existingTurns.add(newTurn);
+            }
+        }
+    }
+
+    private static Field getFieldFromEntity(GameEntity entity) {
+        String fieldState = entity.getFieldState();
+        Field gameField = new Field();
+
+        for (int i = 0; i < fieldState.length(); i++) {
+            char cell = fieldState.charAt(i);
+            int cellValue = cell - '0';
+            FieldPosition pos = new FieldPosition(i / gameField.getRows(), i % gameField.getCols());
+            gameField.setFieldValue(pos, cellValue);
+        }
+        return gameField;
+    }
+
+    private static List<Turn> getTurnsFromEntity(GameEntity entity) {
+        List<Turn> turns = new ArrayList<>();
+        List<TurnEntity> turnsHistory = entity.getTurnsHistory();
+        for (TurnEntity turn: turnsHistory) {
+            FieldPosition pos = new FieldPosition(turn.getRow(), turn.getCol());
+            turns.add(new Turn(pos, turn.getPlayer()));
+        }
+        return turns;
+    }
+
+    private static String getFieldStateFromGame(Game game) {
+        StringBuilder fieldState = new StringBuilder();
+        Field field = game.getField();
+        int[][] matrix = field.getFieldMatrix();
+        for (int i = 0; i < field.getRows(); i++) {
+            StringBuilder row = new StringBuilder();
+            for (int j = 0; j < field.getCols(); j++) {
+                row.append(matrix[i][j]);
+            }
+            fieldState.append(row.toString());
+        }
+        return fieldState.toString();
+    }
+
+    private static List<TurnEntity> getTurnsFromGame(Game game, GameEntity entity) {
+        List<TurnEntity> turnEntities = new ArrayList<>();
+        for (Turn turn : game.getTurns()) {
+            TurnEntity turnEntity = TurnEntity.builder()
+                    .row(turn.getPosition().getRow())
+                    .col(turn.getPosition().getCol())
+                    .player(turn.getPlayer())
+                    .game(entity)
+                    .build();
+            turnEntities.add(turnEntity);
+        }
+
+        return turnEntities;
+    }
+
+
+}
+package tictactoe.datasource.repository;
+
+
+import org.springframework.data.repository.CrudRepository;
+import org.springframework.stereotype.Repository;
+
+import tictactoe.datasource.model.GameEntity;
+
+
+import java.util.UUID;
+
+@Repository
+public interface GameRepository extends CrudRepository<GameEntity, UUID> {
+
+}
+package tictactoe.datasource.repository;
+
+import org.springframework.data.repository.CrudRepository;
+import org.springframework.stereotype.Repository;
+import tictactoe.datasource.model.UserEntity;
+
+import java.util.Optional;
+import java.util.UUID;
+
+@Repository
+public interface UserRepository extends CrudRepository<UserEntity, UUID> {
+    Optional<UserEntity> findByLogin(String login);
+}
+package tictactoe.di;
+
+
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import tictactoe.datasource.repository.GameRepository;
+import tictactoe.datasource.repository.UserRepository;
+import tictactoe.domain.model.AuthFilter;
+import tictactoe.domain.service.AuthService;
+import tictactoe.domain.service.GameService;
+import tictactoe.datasource.service.GameRepositoryService;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import tictactoe.domain.service.UserService;
+
+import java.util.List;
+
+@Configuration
+public class SpringConfiguration {
+
+    @Bean
+    public GameRepositoryService repositoryService(GameRepository gameRepository) {
+        return new GameRepositoryService(gameRepository);
+    }
+
+    @Bean
+    public GameService gameService(GameRepositoryService repositoryService) {
+        return new GameService(repositoryService);
+    }
+
+    @Bean
+    public UserService userService(UserRepository userRepository) {
+        return new UserService(userRepository);
+    }
+
+
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    public AuthService authService(PasswordEncoder passwordEncoder, UserService userService) {
+        return new AuthService(passwordEncoder, userService);
+    }
+
+    @Bean
+    public AuthFilter authFilter(PasswordEncoder passwordEncoder, AuthService authService) {
+        return new AuthFilter(authService, passwordEncoder);
+    }
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http, AuthFilter authFilter) throws Exception {
+        http
+            .csrf(csrf -> csrf.disable())
+            .authorizeHttpRequests(auth -> auth
+            .requestMatchers("/auth/**").permitAll()
+            .anyRequest().authenticated())
+            .addFilterBefore(authFilter, UsernamePasswordAuthenticationFilter.class);
+        return http.build();
+    }
+
+
+
+
+
+}
+package tictactoe.web.model;
+
+
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import lombok.Getter;
+
+@Getter
+public class SignUpRequest {
+    @Size(min = 2, max = 32, message = "Wrong login length (2 to 32 characters long)")
+    @Pattern(regexp = "^\\S+$", message = "Spaces are not allowed")
+    private String login;
+
+    @Size(min = 8, max = 64, message = "Wrong password length (8 to 64 characters long)")
+    @Pattern(regexp = "^\\S+$", message = "Spaces are not allowed")
+    private String password;
+}
+package tictactoe.web.model;
+
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+public class TurnRequest {
+    @Min(1) @Max(3) private int row;
+    @Min(1) @Max(3) private int col;
+    private String player;
+
+    public static PlayerEnum getPlayerToDomain(TurnRequest request) {
+        if (request.getPlayer().equalsIgnoreCase("player")) {
+            return PlayerEnum.PLAYER;
+        } else if (request.getPlayer().equalsIgnoreCase("ai")) {
+            return PlayerEnum.AI;
+        } else {
+            throw new IllegalArgumentException("Unknown player");
+        }
+    }
+}
+package tictactoe.web.model;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+
+import java.time.LocalDateTime;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.UUID;
+
+
+@RestControllerAdvice
+public class WebExceptionHandler {
+
+    @ExceptionHandler(NoSuchElementException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public Map<String, Object> handleNotFound(NoSuchElementException ex) {
+        return Map.of(
+                "timestamp", LocalDateTime.now(),
+                "status", 404,
+                "error", "Not Found",
+                "message", ex.getMessage()
+        );
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Map<String, Object> handleIllegalArgument(IllegalArgumentException ex) {
+        return Map.of(
+                "timestamp", LocalDateTime.now(),
+                "status", 400,
+                "error", "Invalid data",
+                "message", ex.getMessage()
+        );
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public Map<String, Object> handleInvalidUUID(MethodArgumentTypeMismatchException ex) {
+        if (ex.getRequiredType() != null && ex.getRequiredType().equals(UUID.class)) {
+            return Map.of(
+                    "timestamp", LocalDateTime.now(),
+                    "status", 404,
+                    "error", "Not found",
+                    "message", "Game not found"
+            );
+        }
+        return Map.of(
+                "timestamp", LocalDateTime.now(),
+                "status", 400,
+                "error", "Invalid data",
+                "message", ex.getMessage()
+        );
+    }
+
+    @ExceptionHandler(IllegalStateException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public Map<String, Object> handleIllegalState(IllegalStateException ex) {
+        return Map.of(
+                "timestamp", LocalDateTime.now(),
+                "status", 409,
+                "error", "Invalid data",
+                "message", ex.getMessage()
+        );
+    }
+}
+package tictactoe.web.model;
+
+import lombok.Builder;
+import lombok.Getter;
+import tictactoe.domain.model.*;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
+
+@Builder
+@Getter
+public class WebDTO {
+    private final UUID id;
+    private final boolean isAiFirstTurn;
+    private String[][] field;
+    private String currentPlayer;
+    private List<TurnRequest> turns;
+    private String result;
+}
+package tictactoe.web.mapper;
+
+import tictactoe.domain.model.User;
+import tictactoe.web.model.SignUpRequest;
+
+public class UserRequestMapper {
+    public static User toUser(SignUpRequest credentials) {
+        return new User(credentials.getLogin());
+    }
+}
+package tictactoe.web.mapper;
+
+import tictactoe.domain.model.*;
+import tictactoe.web.model.TurnRequest;
+import tictactoe.web.model.WebDTO;
+
+import java.util.ArrayList;
+import java.util.List;
+
+
+public class WebDTOMapper {
+    public static WebDTO toResponse(Game game) {
+        return WebDTO.builder()
+                .id(game.getGameId())
+                .isAiFirstTurn(game.isAiFirstTurn())
+                .field(getGameFieldResponse(game))
+                .turns(getTurnsResponse(game))
+                .currentPlayer(getCurrentPlayerResponse(game))
+                .result(getResultResponse(game))
+                .build();
+    }
+
+    public static Game toGame(WebDTO gameResponse) {
+        return new Game(
+                gameResponse.getId(),
+                getFieldGame(gameResponse),
+                getTurnsGame(gameResponse),
+                getPlayerGame(gameResponse),
+                getResultGame(gameResponse)
+        );
+    }
+
+    public static Turn toTurnGame(TurnRequest request) {
+        return new Turn(
+                new FieldPosition(request.getRow() - 1, request.getCol() - 1),
+                TurnRequest.getPlayerToDomain(request)
+        );
+    }
+
+    public static TurnRequest toTurnRequest(Turn turn) {
+        return new TurnRequest(
+                turn.getPosition().getRow() + 1,
+                turn.getPosition().getCol() + 1,
+                turn.getPlayer().getPlayerName()
+        );
+    }
+
+
+
+
+    public static String[][] getGameFieldResponse(Game game) {
+        Field field = game.getField();
+        int rows = field.getRows();
+        int cols = field.getCols();
+        int[][] fieldMatrix = field.getFieldMatrix();
+        boolean isAiCross = game.isAiFirstTurn();
+        String[][] fieldResponse = new String[rows][cols];
+        for (int i = 0; i < rows; i++) {
+            for (int j = 0; j < cols; j++) {
+                int fieldCellValue = fieldMatrix[i][j];
+                switch (fieldCellValue) {
+                    case 0 -> fieldResponse[i][j] = " ";
+                    case 1 -> fieldResponse[i][j] = isAiCross ? "O" : "X";
+                    case 2 -> fieldResponse[i][j] = isAiCross ? "X" : "O";
+                    default -> throw new IllegalArgumentException("Incorrect field value");
+                }
+            }
+        }
+        return fieldResponse;
+    }
+
+    public static List<TurnRequest> getTurnsResponse(Game game) {
+        List<Turn> gameTurns = game.getTurns();
+        List<TurnRequest> turnsResponse = new ArrayList<>();
+        for (Turn turn : gameTurns) {
+            int row = turn.getPosition().getRow() + 1;
+            int col = turn.getPosition().getCol() + 1;
+            String player = turn.getPlayer().getPlayerName();
+            turnsResponse.add(new TurnRequest(row, col, player));
+        }
+        return turnsResponse;
+    }
+
+    public static String getCurrentPlayerResponse(Game game) {
+        return game.getTurnOrder().getPlayerName();
+    }
+
+    public static String getResultResponse(Game game) {
+        return game.getResult().getResultString();
+    }
+
+    public static Field getFieldGame(WebDTO gameResponse) {
+        String[][] field = gameResponse.getField();
+        int rows = field.length;
+        int cols = field[rows - 1].length;
+        boolean isAiCross = gameResponse.isAiFirstTurn();
+        if (rows != cols) {
+            throw new IllegalArgumentException("Incorrect field size");
+        }
+        Field gameField = new Field();
+        for (int i = 0; i < rows; i++) {
+            for (int j = 0; j < cols; j++) {
+                if (field[i].length != rows) {
+                    throw new IllegalArgumentException("Incorrect field size");
+                }
+                String cell = field[i][j];
+                FieldPosition position = new FieldPosition(i, j);
+                switch (cell) {
+                    case "X" -> gameField.setFieldValue(position, isAiCross ? 2 : 1);
+                    case "O" -> gameField.setFieldValue(position, isAiCross ? 1 : 2);
+                    case " " -> gameField.setFieldValue(position, 0);
+                    default -> throw new IllegalArgumentException("Incorrect field value");
+                }
+            }
+        }
+        return gameField;
+    }
+
+    public static List<Turn> getTurnsGame(WebDTO gameResponse) {
+        List<Turn> gameTurns = new ArrayList<>();
+        List<TurnRequest> responseTurns = gameResponse.getTurns();
+        for (TurnRequest turn : responseTurns) {
+            Turn turnGame = getTurnGame(turn);
+            gameTurns.add(turnGame);
+        }
+        return gameTurns;
+    }
+
+    public static Turn getTurnGame(TurnRequest turnInfo) {
+        int row = turnInfo.getRow() - 1;
+        int col = turnInfo.getCol() - 1;
+        String playerName = turnInfo.getPlayer();
+        PlayerEnum player;
+        switch (playerName) {
+            case "Player" -> player = PlayerEnum.PLAYER;
+            case "AI" -> player = PlayerEnum.AI;
+            default -> throw new IllegalArgumentException("Incorrect turn player");
+        }
+        return new Turn(
+                new FieldPosition(row, col),
+                player
+        );
+    }
+
+
+    public static PlayerEnum getPlayerGame(WebDTO gameResponse) {
+        return switch (gameResponse.getCurrentPlayer().toLowerCase()) {
+            case "player" -> PlayerEnum.PLAYER;
+            case "ai" -> PlayerEnum.AI;
+            default -> throw new IllegalArgumentException("Incorrect player type");
+        };
+    }
+
+
+    public static GameResult getResultGame(WebDTO gameResponse) {
+        return switch (gameResponse.getResult().toLowerCase()) {
+            case "processing" -> GameResult.PROCESSING;
+            case "draw" -> GameResult.DRAW;
+            case "ai won" -> GameResult.AI_WON;
+            case "player won" -> GameResult.PLAYER_WON;
+            default -> throw new IllegalArgumentException("Incorrect result type");
+        };
+    }
+}
+package tictactoe.web.controller;
+
+
+import tictactoe.domain.model.Game;
+import tictactoe.domain.model.Turn;
+
+import tictactoe.domain.service.GameService;
+import tictactoe.datasource.service.GameRepositoryService;
+import org.springframework.web.bind.annotation.*;
+import tictactoe.web.mapper.WebDTOMapper;
+import tictactoe.web.model.TurnRequest;
+import tictactoe.web.model.WebDTO;
+
+import java.util.List;
+
+import java.util.UUID;
+
+
+@RestController
+@RequestMapping("/game")
+@CrossOrigin(origins = "*")
+public class GameController {
+    private final GameService gameService;
+
+    public GameController(GameRepositoryService repositoryService, GameService gameService) {
+        this.repositoryService = repositoryService;
+        this.gameService = gameService;
+    }
+
+    @PostMapping("/create")
+    public WebDTO createGame() {
+        return gameService.createGame();
+
+    }
+
+    @GetMapping("/{gameId}")
+    public WebDTO getGame(@PathVariable("gameId") UUID id) {
+        return gameService.getGame(id);
+    }
+
+    @PostMapping("/{gameId}/move")
+    public WebDTO makeMove(@PathVariable("gameId") UUID id, @RequestBody TurnRequest request) {
+        return gameService.makeTurn(id, request);
+    }
+
+    @GetMapping("/all")
+    public List<WebDTO> getAllGames() {
+        return gameService.getAllGames();
+    }
+}
+package tictactoe.web.controller;
+
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import tictactoe.domain.service.AuthService;
+import tictactoe.web.model.SignUpRequest;
+
+
+import javax.naming.AuthenticationException;
+import java.util.UUID;
+
+@RestController
+@RequestMapping("/auth")
+@CrossOrigin(origins = "*")
+public class AuthController {
+    private AuthService authService;
+
+    public AuthController(AuthService authService) {
+        this.authService = authService;
+    }
+
+
+    @PostMapping("signup")
+    public ResponseEntity<String> signUp(@RequestBody SignUpRequest credentials) {
+        boolean registrationStatus = authService.signUpUser(credentials);
+        if (!registrationStatus) {
+            return ResponseEntity.status(409).body("Registration failed!");
+        }
+        return ResponseEntity.status(201).body("Success!");
+    }
+
+
+    @PostMapping("login")
+    public UUID signIn(@RequestHeader("Authorization") String authHeader) throws AuthenticationException {
+        return authService.signInUser(authHeader);
+    }
+}
+package tictactoe;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class Application {
+    public static void main(String[] args) {
+        SpringApplication.run(Application.class, args);
+    }
+}package tictactoe.domain.model;
+
+import lombok.Getter;
+
+@Getter
+public enum GameResult {
+    AI_WON("AI won"),
+    PLAYER_WON("Player won"),
+    DRAW("Draw"),
+    PROCESSING("Processing");
+
+    String resultString;
+
+    GameResult(String result) {
+        this.resultString = result;
+    }
+
+}
+package tictactoe.domain.model;
+
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.ServletRequest;
+import jakarta.servlet.ServletResponse;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.filter.GenericFilterBean;
+import tictactoe.domain.service.AuthService;
+
+import java.io.IOException;
+import java.util.Collections;
+import java.util.UUID;
+
+
+public class AuthFilter extends GenericFilterBean {
+    AuthService authService;
+    PasswordEncoder passwordEncoder;
+
+    public AuthFilter(AuthService authService, PasswordEncoder passwordEncoder) {
+        this.authService = authService;
+        this.passwordEncoder = passwordEncoder;
+    }
+
+    @Override
+    public void doFilter(ServletRequest request, ServletResponse response, FilterChain filterChain) throws IOException, ServletException {
+        HttpServletRequest mappedRequest = (HttpServletRequest) request;
+        HttpServletResponse mappedResponse = (HttpServletResponse) response;
+        String path = mappedRequest.getRequestURI();
+
+        if ("OPTIONS".equalsIgnoreCase(mappedRequest.getMethod())) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        if (path.startsWith("/auth/")) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        try {
+            String headerAuthString = mappedRequest.getHeader("Authorization");
+            UUID userId = authService.signInUser(headerAuthString);
+            UsernamePasswordAuthenticationToken authentication =
+                    new UsernamePasswordAuthenticationToken(userId, null, Collections.emptyList());
+            SecurityContextHolder.getContext().setAuthentication(authentication);
+            filterChain.doFilter(request, response);
+        } catch (BadCredentialsException e) {
+            mappedResponse.sendError(401, e.getMessage());
+        }
+    }
+}
+package tictactoe.domain.model;
+
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+
+@Getter
+@AllArgsConstructor
+public class FieldPosition {
+    private int row;
+    private int col;
+}package tictactoe.domain.model;
+
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+import java.util.Optional;
+import java.util.UUID;
+
+@Setter
+@Getter
+@NoArgsConstructor
+public class User {
+    private UUID userId;
+    private String login;
+
+    public User(String login) {
+        this.userId = null;
+        this.login = login;
+    }
+
+
+    public Optional<UUID> getUserId() {
+        return Optional.ofNullable(this.userId);
+    }
+}
+package tictactoe.domain.model;
+
+import lombok.Builder;
+import lombok.Getter;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.UUID;
+
+
+
+@Getter
+public class Game {
+    private final UUID gameId;
+    private final Field field;
+    private final List<Turn> turns;
+    private PlayerEnum turnOrder;
+    private GameResult result;
+
+    public Game() {
+        this.gameId = null;
+        this.field = new Field();
+        this.turns = new ArrayList<>();
+        this.turnOrder = PlayerEnum.getRandomTurnOrder();
+        this.result = GameResult.PROCESSING;
+    }
+
+    public Game(UUID gameId, Field field, List<Turn> turns, PlayerEnum turnOrder, GameResult result) {
+        this.gameId = gameId;
+        this.field = field;
+        this.turns = turns != null ? new ArrayList<>(turns) : new ArrayList<>();
+        this.turnOrder = turnOrder;
+        this.result = result;
+    }
+
+    public List<Turn> getTurns() {
+        return Collections.unmodifiableList(turns);
+    }
+
+    public boolean isAiFirstTurn() {
+        if (this.turns.isEmpty()) {
+            return this.turnOrder.isAiTurn();
+        }
+        return this.turns.getFirst().getPlayer().isAiTurn();
+    }
+
+
+}package tictactoe.domain.model;
+
+import lombok.Getter;
+
+import java.util.concurrent.ThreadLocalRandom;
+
+@Getter
+public enum PlayerEnum{
+    PLAYER(false, "Player"),
+    AI(true, "AI");
+
+    boolean isAiTurn;
+    String playerName;
+
+    PlayerEnum(boolean isAiTurn, String playerName) {
+        this.isAiTurn = isAiTurn;
+        this.playerName = playerName;
+    }
+
+    public static PlayerEnum getRandomTurnOrder() {
+        return values()[ThreadLocalRandom.current().nextInt(values().length)];
+    }
+
+}
+package tictactoe.domain.model;
+
+import lombok.Builder;
+import lombok.Getter;
+
+@Getter
+public class Field {
+    private static final int rows = 3;
+    private static final  int cols = 3;
+    private final int[][] fieldMatrix;
+
+    public Field() {
+        this.fieldMatrix = new int[rows][cols];
+    }
+
+    public int getRows() {
+        return rows;
+    }
+
+    public int getCols() {
+        return cols;
+    }
+
+
+    public int[][] getFieldMatrix() {
+        int[][] fieldCopy = new int[rows][cols];
+        for (int i = 0; i < this.rows; i++) {
+            System.arraycopy(fieldMatrix[i], 0, fieldCopy[i], 0, this.cols);
+        }
+        return fieldCopy;
+    }
+
+    public static Field getFieldCopy(Field original) {
+        Field copy = new Field();
+        int[][] src = original.getFieldMatrix();
+        for (int i = 0; i < original.getRows(); i++) {
+            System.arraycopy(src[i], 0, copy.fieldMatrix[i], 0, original.getCols());
+        }
+        return copy;
+    }
+
+
+    public boolean setFieldValue(FieldPosition turnPos, int turn) {
+        int row = turnPos.getRow();
+        int col = turnPos.getCol();
+        if (row > rows - 1 || row < 0 || col > cols - 1 || col < 0) {
+            return false;
+        }
+        if (this.fieldMatrix[row][col] != 0) {
+            return false;
+        }
+        if (turn < 1 || turn > 2) {
+            return false;
+        }
+        this.fieldMatrix[row][col] = turn;
+        return true;
+    }
+
+    public int getFieldValue(FieldPosition position) {
+        int row = position.getRow();
+        int col = position.getCol();
+        if (row > rows - 1 || row < 0 || col > cols - 1 || col < 0) {
+            throw new IllegalArgumentException(
+                    String.format("Incorrect coordinates [%d %d]. Range: row [0-%d], col[0-%d]",
+                            row,
+                            col,
+                            this.rows - 1,
+                            this.cols - 1)
+            );
+        }
+        return fieldMatrix[position.getRow()][position.getCol()];
+    }
+}package tictactoe.domain.model;
+
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+
+@AllArgsConstructor
+@Getter
+public class Turn {
+    private FieldPosition position;
+    private PlayerEnum player;
+}
+package tictactoe.domain.service;
+
+import tictactoe.datasource.model.UserEntity;
+import tictactoe.domain.model.User;
+
+import java.util.Optional;
+
+public interface UserInterface {
+    public boolean createUser(User user, String hashPassword);
+
+    public Optional<UserEntity> getUser(String login);
+}
+package tictactoe.domain.service;
+
+import jakarta.transaction.Transactional;
+import tictactoe.datasource.service.GameRepositoryService;
+import tictactoe.domain.model.*;
+import tictactoe.web.mapper.WebDTOMapper;
+import tictactoe.web.model.TurnRequest;
+import tictactoe.web.model.WebDTO;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
+
+public class GameService implements GameInterface {
+    GameRepositoryService repositoryService;
+
+    public GameService(GameRepositoryService repositoryService) {
+        this.repositoryService = repositoryService;
+    }
+
+    private final int emptyCell = 0;
+    private final int playerTurn = 1;
+    private final int aiTurn = 2;
+
+
+    @Transactional
+    public WebDTO createGame() {
+        Game game = firstAiTurn(new Game());
+        return WebDTOMapper.toResponse(repositoryService.saveOrUpdateGame(game));
+    }
+
+    public Game firstAiTurn(Game game) {
+        if (game.getTurnOrder() == PlayerEnum.AI) {
+            Turn aiTurn = getNextTurn(game);
+            return processAndCheckTurn(game, aiTurn);
+        }
+        return game;
+    }
+
+    public WebDTO getGame(UUID id) {
+       Game game = repositoryService.getGameById(id);
+       return WebDTOMapper.toResponse(game);
+    }
+
+    public List<WebDTO> getAllGames(){
+        List<Game> allGames = repositoryService.getAllGames();
+        return allGames.stream().map(WebDTOMapper::toResponse).toList();
+    }
+
+    @Transactional
+    public WebDTO makeTurn(UUID id, TurnRequest turnRequest) {
+        Game game = repositoryService.getGameById(id);
+        Turn turn = WebDTOMapper.toTurnGame(turnRequest);
+        if (game.getResult() != GameResult.PROCESSING) {
+            throw new IllegalStateException("This game is finished: " + game.getResult().getResultString());
+        }
+
+        if (game.getTurnOrder() != PlayerEnum.PLAYER) {
+            throw  new IllegalStateException("It's not your turn to move right now.");
+        }
+
+        if (!isValidMove(game.getField(), turn)) {
+            throw new IllegalArgumentException("Incorrect turn. Try again.");
+        }
+
+        Game gameWithPlayerTurn = repositoryService.saveOrUpdateGame(processAndCheckTurn(game, turn));
+        if (gameWithPlayerTurn.getResult() != GameResult.PROCESSING) {
+            return WebDTOMapper.toResponse(gameWithPlayerTurn);
+        }
+
+        Turn aiTurn = getNextTurn(gameWithPlayerTurn);
+        Game newTurnGame = repositoryService.saveOrUpdateGame(processAndCheckTurn(gameWithPlayerTurn, aiTurn));
+        return WebDTOMapper.toResponse(newTurnGame);
+
+    }
+
+    private Game processAndCheckTurn(Game currentGame, Turn turn) {
+        GameResult beforeResult = checkGameEnd(currentGame);
+        if (beforeResult != GameResult.PROCESSING) {
+            return finalizeGame(currentGame, beforeResult);
+        }
+        FieldPosition pos = turn.getPosition();
+        PlayerEnum player = turn.getPlayer();
+        Game nextGame = simulateTurn(currentGame, pos, player);
+        GameResult result = checkGameEnd(nextGame);
+        return (result != GameResult.PROCESSING) ? finalizeGame(nextGame, result) : nextGame;
+    }
+
+    public boolean isValidMove(Field field, Turn turn) {
+        FieldPosition position = turn.getPosition();
+        return (field.getFieldValue(position) == 0);
+    }
+
+    @Override
+    public Turn getNextTurn(Game game) {
+        int bestScore = Integer.MIN_VALUE;
+        Field field = game.getField();
+        List<Turn> bestTurns = new ArrayList<>();
+
+        for (int i = 0; i < field.getRows(); i++) {
+            for (int j = 0; j < field.getCols(); j++) {
+
+                FieldPosition currentPosition = new FieldPosition(i, j);
+                if (field.getFieldValue(new FieldPosition(i, j)) == emptyCell) {
+
+                    Game newGame = simulateTurn(game, currentPosition, game.getTurnOrder());
+                    Turn possibleTurn = newGame.getTurns().getLast();
+                    int rating = minMax(newGame, 0);
+
+                    if (rating > bestScore) {
+                        bestScore = rating;
+                        bestTurns.clear();
+                        bestTurns.add(possibleTurn);
+
+                    } else if (rating == bestScore) {
+                        bestTurns.add(possibleTurn);
+                    }
+                }
+            }
+        }
+        if (bestTurns.isEmpty()) {
+            throw new IllegalStateException("No moves available");
+        }
+        return bestTurns.get(ThreadLocalRandom.current().nextInt(bestTurns.size()));
+    }
+
+    @Override
+    public GameResult checkGameEnd(Game game) {
+        Field field = game.getField();
+        List<Turn> turns = game.getTurns();
+        if (turns.isEmpty()) {
+            return GameResult.PROCESSING;
+        }
+        if (game.getResult() != GameResult.PROCESSING) {
+            return game.getResult();
+        }
+
+        Turn turn = turns.getLast();
+        FieldPosition turnPosition = turn.getPosition();
+        boolean resHorizontal = checkHorizontal(field, turnPosition);
+        if (resHorizontal) {
+            return turn.getPlayer().isAiTurn() ? GameResult.AI_WON : GameResult.PLAYER_WON;
+        }
+        boolean resVertical = checkVertical(field, turnPosition);
+        if (resVertical) {
+            return turn.getPlayer().isAiTurn() ? GameResult.AI_WON : GameResult.PLAYER_WON;
+        }
+        if ((turnPosition.getCol() == turnPosition.getRow())
+                || ((turnPosition.getRow() + turnPosition.getCol()) == (field.getRows() - 1))) {
+            if (checkDiagonals(field, turnPosition)) {
+                return turn.getPlayer().isAiTurn() ? GameResult.AI_WON : GameResult.PLAYER_WON;
+            }
+        }
+        if (turns.size() == (field.getRows() * field.getCols())) {
+            return GameResult.DRAW;
+        }
+        return GameResult.PROCESSING;
+    }
+
+    @Override
+    public boolean validateField(Game game) {
+        List<Turn> turns = game.getTurns();
+        Field field = game.getField();
+        Field restoredField = new Field();
+        for (Turn turn: turns) {
+            restoredField.setFieldValue(turn.getPosition(), turn.getPlayer().isAiTurn() ? aiTurn : playerTurn);
+        }
+        for (int i = 0; i < field.getRows(); i++) {
+            for (int j = 0; j < field.getCols(); j++) {
+                FieldPosition pos = new FieldPosition(i, j);
+                if (field.getFieldValue(pos) != restoredField.getFieldValue(pos)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    private boolean checkHorizontal(Field field, FieldPosition position) {
+        int row = position.getRow();
+        int horizontalStartValue = field.getFieldValue(new FieldPosition(row, 0));
+
+        if (horizontalStartValue == emptyCell) {
+            return false;
+        }
+
+        for (int col = 1; col < field.getCols(); col++) {
+            if (horizontalStartValue != field.getFieldValue(new FieldPosition(row, col))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean checkVertical(Field field, FieldPosition position) {
+        int col = position.getCol();
+        int verticalStartValue = field.getFieldValue(new FieldPosition(0, col));
+
+        if (verticalStartValue == emptyCell) {
+            return false;
+        }
+
+        for (int row = 1; row < field.getRows(); row++) {
+            if (verticalStartValue != field.getFieldValue(new FieldPosition(row, col))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean checkDiagonals(Field field, FieldPosition position) {
+        int startMainDiagonalValue = field.getFieldValue(new FieldPosition(0,0));
+        int startSecondaryDiagonalValue = field.getFieldValue(new FieldPosition(0, field.getCols() - 1));
+
+        boolean resMain = true;
+        boolean resSecondary = true;
+
+        if (startMainDiagonalValue == emptyCell) {
+            resMain = false;
+        } else {
+            for (int i = 1; i < field.getRows(); i++) {
+                if (startMainDiagonalValue != field.getFieldValue(new FieldPosition(i, i))) {
+                    resMain = false;
+                    break;
+                }
+            }
+        }
+        if (startSecondaryDiagonalValue == emptyCell) {
+            resSecondary = false;
+        } else {
+            for (int j = 1; j < field.getRows(); j++) {
+                if (startSecondaryDiagonalValue != field.getFieldValue(new FieldPosition(j, field.getRows() - 1 - j))) {
+                    resSecondary = false;
+                    break;
+                }
+            }
+        }
+
+        return (resMain || resSecondary);
+    }
+
+    private int minMax(Game game, int depth) {
+        GameResult result = checkGameEnd(game);
+        Field field = game.getField();
+        switch (result) {
+            case AI_WON -> {
+                return 10 - depth;
+            }
+            case PLAYER_WON -> {
+                return  -10 + depth;
+            }
+            case DRAW -> {
+                return 0;
+            }
+            case PROCESSING -> {
+                boolean isAiTurn = game.getTurnOrder().isAiTurn();
+                int bestScore = isAiTurn ? Integer.MIN_VALUE : Integer.MAX_VALUE;
+
+                for (int i = 0; i < field.getRows(); i++) {
+                    for (int j = 0; j < field.getCols(); j++) {
+                        FieldPosition currPos = new FieldPosition(i, j);
+                        if (field.getFieldValue(currPos) == emptyCell) {
+                            Game simulatedGame = simulateTurn(game, currPos, game.getTurnOrder());
+                            int rating = minMax(simulatedGame, depth + 1);
+                            bestScore = isAiTurn ? Math.max(rating, bestScore) : Math.min(rating, bestScore);
+                        }
+                    }
+                }
+                return bestScore;
+            }
+        }
+        throw new IllegalStateException("Minimax reached unreachable state for game: " + game.getGameId());
+    }
+
+
+
+    private Game simulateTurn(Game game, FieldPosition posOfTurn, PlayerEnum player) {
+        boolean isAiTurn = player.isAiTurn();
+        Turn newTurn = new Turn(posOfTurn, player);
+        if (game.getTurnOrder() != newTurn.getPlayer()) {
+            throw new IllegalStateException("Wrong player's turn.");
+        }
+        Field newField = Field.getFieldCopy(game.getField());
+        List<Turn> turns = new ArrayList<>(game.getTurns());
+        turns.add(newTurn);
+        newField.setFieldValue(posOfTurn, isAiTurn ? 2: 1);
+        PlayerEnum turn = isAiTurn ? PlayerEnum.PLAYER : PlayerEnum.AI;
+        return new Game(
+                game.getGameId(),
+                newField,
+                turns,
+                turn,
+                game.getResult()
+        );
+    }
+
+    private Game finalizeGame(Game game, GameResult result) {
+        return new Game(
+                game.getGameId(),
+                game.getField(),
+                game.getTurns(),
+                game.getTurnOrder(),
+                result
+        );
+    }
+}package tictactoe.domain.service;
+
+
+import tictactoe.domain.model.Game;
+import tictactoe.domain.model.GameResult;
+import tictactoe.domain.model.Turn;
+
+public interface GameInterface {
+
+    Turn getNextTurn(Game game);
+
+    boolean validateField(Game game);
+
+    GameResult checkGameEnd(Game game);
+}package tictactoe.domain.service;
+
+
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import tictactoe.datasource.model.UserEntity;
+import tictactoe.domain.model.User;
+import tictactoe.web.mapper.UserRequestMapper;
+import tictactoe.web.model.SignUpRequest;
+
+import java.util.Base64;
+import java.util.Optional;
+import java.util.UUID;
+
+
+public class AuthService {
+    private final PasswordEncoder passwordEncoder;
+    private final UserService userService;
+
+    public AuthService(PasswordEncoder passwordEncoder, UserService userService) {
+        this.passwordEncoder = passwordEncoder;
+        this.userService = userService;
+    }
+
+    private String GetHashPassword(String password) {
+        return passwordEncoder.encode(password);
+    }
+
+    public boolean signUpUser(SignUpRequest credentials) {
+        try {
+            User user = UserRequestMapper.toUser(credentials);
+            String hashPassword = GetHashPassword(credentials.getPassword());
+            return userService.createUser(user, hashPassword);
+        } catch (DataIntegrityViolationException e) {
+            return false;
+        }
+    }
+
+    public UUID signInUser(String base64Credentials) {
+        String[] credentials = decodeCredentials(base64Credentials);
+        String login = credentials[0];
+        String password = credentials[1];
+        Optional<UserEntity> optionalEntity = userService.getUser(login);
+        if (optionalEntity.isPresent() && passwordEncoder.matches(password, optionalEntity.get().getHashedPassword())) {
+            return optionalEntity.get().getUserId();
+        }
+        throw new BadCredentialsException("Invalid login or password");
+    }
+
+    public static String[] decodeCredentials(String authHeader){
+        if (authHeader == null || !authHeader.startsWith("Basic ")) {
+            throw new BadCredentialsException("Invalid credentials format");
+        }
+        String base64Credentials = authHeader.substring(6);
+        byte[] decodedData = Base64.getDecoder().decode(base64Credentials);
+        String data = new String(decodedData);
+        String[] credentials = data.split(":");
+        if (credentials.length != 2 || credentials[0].isBlank() || credentials[1].isBlank()) {
+            throw new BadCredentialsException("Invalid credentials format");
+        }
+        return  credentials;
+    }
+
+
+}
+package tictactoe.domain.service;
+
+import tictactoe.domain.model.Field;
+import tictactoe.domain.model.FieldPosition;
+import tictactoe.domain.model.Game;
+import tictactoe.domain.model.GameResult;
+
+public class AiService {
+
+
+
+}
+package tictactoe.domain.service;
+
+import tictactoe.datasource.mapper.UserMapper;
+import tictactoe.datasource.model.UserEntity;
+import tictactoe.datasource.repository.UserRepository;
+import tictactoe.domain.model.User;
+
+import java.util.Optional;
+
+public class UserService implements UserInterface{
+    private UserRepository userRepository;
+
+    public UserService(UserRepository userRepository) {
+        this.userRepository = userRepository;
+    }
+
+    @Override
+    public boolean createUser(User user, String hashPassword) {
+        UserEntity newUser = UserMapper.toEntity(user, hashPassword);
+        userRepository.save(newUser);
+        return true;
+    }
+
+    @Override
+    public Optional<UserEntity> getUser(String login) {
+        return userRepository.findByLogin(login);
+    }
+
+}
+package tictactoe.datasource.model;
+
+import jakarta.persistence.*;
+import lombok.*;
+import tictactoe.domain.model.*;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
+
+
+@Entity
+@Table(name = "games")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class GameEntity {
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID gameId;
+
+    @Column(name = "field_state", nullable = false, length = 9)
+    @Builder.Default
+    private String fieldState = "000000000";
+
+    @OneToMany(mappedBy = "game", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    private List<TurnEntity> turnsHistory = new ArrayList<>();
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "current_player", nullable = false)
+    private PlayerEnum currentPlayer;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "result", nullable = false)
+    private GameResult result;
+
+}package tictactoe.datasource.model;
+
+import jakarta.persistence.*;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import lombok.*;
+
+
+
+import java.util.UUID;
+
+@Entity
+@Table(name = "turns")
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+@Getter
+@Setter
+public class TurnEntity {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long turnId;
+
+    @Column(name="turn_row", nullable = false)
+    private int row;
+
+    @Column(name="turn_col", nullable = false)
+    private int col;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "player", nullable = false)
+    private PlayerEnum player;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "game_id", nullable = false)
+    private GameEntity game;
+
+}
+package tictactoe.datasource.model;
+
+
+import jakarta.persistence.*;
+import lombok.*;
+
+import java.util.UUID;
+
+@Entity
+@Table(name = "users")
+@AllArgsConstructor
+@NoArgsConstructor
+@Getter
+@Setter
+public class UserEntity {
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID userId;
+
+    @Column(name = "login", nullable = false, unique = true)
+    private String login;
+
+    @Column(name = "password_hash", nullable = false)
+    private String hashedPassword;
+}
+package tictactoe.datasource.service;
+
+
+import org.springframework.transaction.annotation.Transactional;
+
+import tictactoe.datasource.mapper.GameMapper;
+import tictactoe.datasource.model.GameEntity;
+import tictactoe.datasource.repository.GameRepository;
+import tictactoe.datasource.repository.UserRepository;
+import tictactoe.domain.model.Game;
+
+import java.util.*;
+import java.util.stream.StreamSupport;
+
+public class GameRepositoryService {
+    private final GameRepository gameRepository;
+
+    public GameRepositoryService(GameRepository gameRepository) {
+        this.gameRepository = gameRepository;
+    }
+
+    @Transactional
+    public Game saveOrUpdateGame(Game game) {
+        if (game.getGameId() == null) {
+            GameEntity entity = GameMapper.toEntity(game);
+            gameRepository.save(entity);
+            return GameMapper.toGame(entity);
+        } else {
+            GameEntity entity = gameRepository.findById(game.getGameId()).orElseThrow(
+                    () -> new NoSuchElementException("Game not found")
+            );
+            GameMapper.updateEntity(entity, game);
+            gameRepository.save(entity);
+            return GameMapper.toGame(entity);
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public Game getGameById(UUID gameId) {
+        Optional<GameEntity> game = gameRepository.findById(gameId);
+        if (game.isPresent()) {
+            GameEntity entity = game.get();
+            return GameMapper.toGame(entity);
+        }
+        throw new NoSuchElementException(String.format("Game with ID %s not found", gameId.toString()));
+    }
+
+    @Transactional(readOnly = true)
+    public List<Game> getAllGames() {
+        return StreamSupport.stream(gameRepository.findAll()
+                .spliterator(), false)
+                .map(GameMapper::toGame)
+                .toList();
+
+    }
+}
+package tictactoe.datasource.mapper;
+
+import tictactoe.datasource.model.UserEntity;
+import tictactoe.domain.model.User;
+
+public class UserMapper {
+    public static UserEntity toEntity(User user, String hashPassword) {
+        UserEntity entity = new UserEntity();
+        entity.setLogin(user.getLogin());
+        entity.setHashedPassword(hashPassword);
+        return entity;
+    }
+
+    public static User toUser(UserEntity entity) {
+        User user = new User();
+        user.setUserId(entity.getUserId());
+        user.setLogin(entity.getLogin());
+        return user;
+    }
+}
+package tictactoe.datasource.mapper;
+
+import tictactoe.datasource.model.GameEntity;
+import tictactoe.datasource.model.TurnEntity;
+import tictactoe.domain.model.Field;
+import tictactoe.domain.model.FieldPosition;
+import tictactoe.domain.model.Game;
+import tictactoe.domain.model.Turn;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
+public class GameMapper {
+
+    public static Game toGame(GameEntity entity) {
+        return new Game(
+                entity.getGameId(),
+                getFieldFromEntity(entity),
+                getTurnsFromEntity(entity),
+                entity.getCurrentPlayer(),
+                entity.getResult()
+        );
+    }
+
+    public static GameEntity toEntity(Game game) {
+        GameEntity entity = new GameEntity();
+        if (game.getGameId() != null) {
+            entity.setGameId(game.getGameId());
+        }
+
+        entity.setFieldState(getFieldStateFromGame(game));
+        entity.setCurrentPlayer(game.getTurnOrder());
+        entity.setResult(game.getResult());
+        entity.setTurnsHistory(getTurnsFromGame(game, entity));
+        return entity;
+    }
+
+    public static void updateEntity(GameEntity entity, Game game) {
+        entity.setFieldState(getFieldStateFromGame(game));
+        entity.setResult(game.getResult());
+        entity.setCurrentPlayer(game.getTurnOrder());
+        List<TurnEntity> existingTurns = entity.getTurnsHistory();
+        List<Turn> domainTurns = game.getTurns();
+        if (existingTurns.size() < domainTurns.size()) {
+            for (int i = existingTurns.size(); i < domainTurns.size(); i++) {
+                Turn domainTurn = domainTurns.get(i);
+                TurnEntity newTurn = TurnEntity.builder()
+                        .row(domainTurn.getPosition().getRow())
+                        .col(domainTurn.getPosition().getCol())
+                        .player(domainTurn.getPlayer())
+                        .game(entity)
+                        .build();
+                existingTurns.add(newTurn);
+            }
+        }
+    }
+
+    private static Field getFieldFromEntity(GameEntity entity) {
+        String fieldState = entity.getFieldState();
+        Field gameField = new Field();
+
+        for (int i = 0; i < fieldState.length(); i++) {
+            char cell = fieldState.charAt(i);
+            int cellValue = cell - '0';
+            FieldPosition pos = new FieldPosition(i / gameField.getRows(), i % gameField.getCols());
+            gameField.setFieldValue(pos, cellValue);
+        }
+        return gameField;
+    }
+
+    private static List<Turn> getTurnsFromEntity(GameEntity entity) {
+        List<Turn> turns = new ArrayList<>();
+        List<TurnEntity> turnsHistory = entity.getTurnsHistory();
+        for (TurnEntity turn: turnsHistory) {
+            FieldPosition pos = new FieldPosition(turn.getRow(), turn.getCol());
+            turns.add(new Turn(pos, turn.getPlayer()));
+        }
+        return turns;
+    }
+
+    private static String getFieldStateFromGame(Game game) {
+        StringBuilder fieldState = new StringBuilder();
+        Field field = game.getField();
+        int[][] matrix = field.getFieldMatrix();
+        for (int i = 0; i < field.getRows(); i++) {
+            StringBuilder row = new StringBuilder();
+            for (int j = 0; j < field.getCols(); j++) {
+                row.append(matrix[i][j]);
+            }
+            fieldState.append(row.toString());
+        }
+        return fieldState.toString();
+    }
+
+    private static List<TurnEntity> getTurnsFromGame(Game game, GameEntity entity) {
+        List<TurnEntity> turnEntities = new ArrayList<>();
+        for (Turn turn : game.getTurns()) {
+            TurnEntity turnEntity = TurnEntity.builder()
+                    .row(turn.getPosition().getRow())
+                    .col(turn.getPosition().getCol())
+                    .player(turn.getPlayer())
+                    .game(entity)
+                    .build();
+            turnEntities.add(turnEntity);
+        }
+
+        return turnEntities;
+    }
+
+
+}
+package tictactoe.datasource.repository;
+
+
+import org.springframework.data.repository.CrudRepository;
+import org.springframework.stereotype.Repository;
+
+import tictactoe.datasource.model.GameEntity;
+
+
+import java.util.UUID;
+
+@Repository
+public interface GameRepository extends CrudRepository<GameEntity, UUID> {
+
+}
+package tictactoe.datasource.repository;
+
+import org.springframework.data.repository.CrudRepository;
+import org.springframework.stereotype.Repository;
+import tictactoe.datasource.model.UserEntity;
+
+import java.util.Optional;
+import java.util.UUID;
+
+@Repository
+public interface UserRepository extends CrudRepository<UserEntity, UUID> {
+    Optional<UserEntity> findByLogin(String login);
+}
+package tictactoe.di;
+
+
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import tictactoe.datasource.repository.GameRepository;
+import tictactoe.datasource.repository.UserRepository;
+import tictactoe.domain.model.AuthFilter;
+import tictactoe.domain.service.AiService;
+import tictactoe.domain.service.AuthService;
+import tictactoe.domain.service.GameService;
+import tictactoe.datasource.service.GameRepositoryService;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import tictactoe.domain.service.UserService;
+
+import java.util.List;
+
+@Configuration
+public class SpringConfiguration {
+
+    @Bean
+    public GameRepositoryService repositoryService(GameRepository gameRepository) {
+        return new GameRepositoryService(gameRepository);
+    }
+
+    @Bean
+    public AiService aiService() {
+        return new AiService();
+    }
+
+    @Bean
+    public GameService gameService(GameRepositoryService repositoryService, AiService aiService) {
+        return new GameService(repositoryService, aiService);
+    }
+
+    @Bean
+    public UserService userService(UserRepository userRepository) {
+        return new UserService(userRepository);
+    }
+
+
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    public AuthService authService(PasswordEncoder passwordEncoder, UserService userService) {
+        return new AuthService(passwordEncoder, userService);
+    }
+
+    @Bean
+    public AuthFilter authFilter(PasswordEncoder passwordEncoder, AuthService authService) {
+        return new AuthFilter(authService, passwordEncoder);
+    }
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http, AuthFilter authFilter) throws Exception {
+        http
+            .csrf(csrf -> csrf.disable())
+            .authorizeHttpRequests(auth -> auth
+            .requestMatchers("/auth/**").permitAll()
+            .anyRequest().authenticated())
+            .addFilterBefore(authFilter, UsernamePasswordAuthenticationFilter.class);
+        return http.build();
+    }
+
+
+
+
+
+}
+package tictactoe.web.model;
+
+
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import lombok.Getter;
+
+@Getter
+public class SignUpRequest {
+    @Size(min = 2, max = 32, message = "Wrong login length (2 to 32 characters long)")
+    @Pattern(regexp = "^\\S+$", message = "Spaces are not allowed")
+    private String login;
+
+    @Size(min = 8, max = 64, message = "Wrong password length (8 to 64 characters long)")
+    @Pattern(regexp = "^\\S+$", message = "Spaces are not allowed")
+    private String password;
+}
+package tictactoe.web.model;
+
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+public class TurnRequest {
+    @Min(1) @Max(3) private int row;
+    @Min(1) @Max(3) private int col;
+    private String player;
+
+    public static PlayerEnum getPlayerToDomain(TurnRequest request) {
+        if (request.getPlayer().equalsIgnoreCase("player")) {
+            return PlayerEnum.PLAYER;
+        } else if (request.getPlayer().equalsIgnoreCase("ai")) {
+            return PlayerEnum.AI;
+        } else {
+            throw new IllegalArgumentException("Unknown player");
+        }
+    }
+}
+package tictactoe.web.model;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+
+import java.time.LocalDateTime;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.UUID;
+
+
+@RestControllerAdvice
+public class WebExceptionHandler {
+
+    @ExceptionHandler(NoSuchElementException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public Map<String, Object> handleNotFound(NoSuchElementException ex) {
+        return Map.of(
+                "timestamp", LocalDateTime.now(),
+                "status", 404,
+                "error", "Not Found",
+                "message", ex.getMessage()
+        );
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Map<String, Object> handleIllegalArgument(IllegalArgumentException ex) {
+        return Map.of(
+                "timestamp", LocalDateTime.now(),
+                "status", 400,
+                "error", "Invalid data",
+                "message", ex.getMessage()
+        );
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public Map<String, Object> handleInvalidUUID(MethodArgumentTypeMismatchException ex) {
+        if (ex.getRequiredType() != null && ex.getRequiredType().equals(UUID.class)) {
+            return Map.of(
+                    "timestamp", LocalDateTime.now(),
+                    "status", 404,
+                    "error", "Not found",
+                    "message", "Game not found"
+            );
+        }
+        return Map.of(
+                "timestamp", LocalDateTime.now(),
+                "status", 400,
+                "error", "Invalid data",
+                "message", ex.getMessage()
+        );
+    }
+
+    @ExceptionHandler(IllegalStateException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public Map<String, Object> handleIllegalState(IllegalStateException ex) {
+        return Map.of(
+                "timestamp", LocalDateTime.now(),
+                "status", 409,
+                "error", "Invalid data",
+                "message", ex.getMessage()
+        );
+    }
+}
+package tictactoe.web.model;
+
+import lombok.Builder;
+import lombok.Getter;
+import tictactoe.domain.model.*;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
+
+@Builder
+@Getter
+public class WebDTO {
+    private final UUID id;
+    private final boolean isAiFirstTurn;
+    private String[][] field;
+    private String currentPlayer;
+    private List<TurnRequest> turns;
+    private String result;
+}
+package tictactoe.web.mapper;
+
+import tictactoe.domain.model.User;
+import tictactoe.web.model.SignUpRequest;
+
+public class UserRequestMapper {
+    public static User toUser(SignUpRequest credentials) {
+        return new User(credentials.getLogin());
+    }
+}
+package tictactoe.web.mapper;
+
+import tictactoe.domain.model.*;
+import tictactoe.web.model.TurnRequest;
+import tictactoe.web.model.WebDTO;
+
+import java.util.ArrayList;
+import java.util.List;
+
+
+public class WebDTOMapper {
+    public static WebDTO toResponse(Game game) {
+        return WebDTO.builder()
+                .id(game.getGameId())
+                .isAiFirstTurn(game.isAiFirstTurn())
+                .field(getGameFieldResponse(game))
+                .turns(getTurnsResponse(game))
+                .currentPlayer(getCurrentPlayerResponse(game))
+                .result(getResultResponse(game))
+                .build();
+    }
+
+    public static Game toGame(WebDTO gameResponse) {
+        return new Game(
+                gameResponse.getId(),
+                getFieldGame(gameResponse),
+                getTurnsGame(gameResponse),
+                getPlayerGame(gameResponse),
+                getResultGame(gameResponse)
+        );
+    }
+
+    public static Turn toTurnGame(TurnRequest request) {
+        return new Turn(
+                new FieldPosition(request.getRow() - 1, request.getCol() - 1),
+                TurnRequest.getPlayerToDomain(request)
+        );
+    }
+
+    public static TurnRequest toTurnRequest(Turn turn) {
+        return new TurnRequest(
+                turn.getPosition().getRow() + 1,
+                turn.getPosition().getCol() + 1,
+                turn.getPlayer().getPlayerName()
+        );
+    }
+
+
+
+
+    public static String[][] getGameFieldResponse(Game game) {
+        Field field = game.getField();
+        int rows = field.getRows();
+        int cols = field.getCols();
+        int[][] fieldMatrix = field.getFieldMatrix();
+        boolean isAiCross = game.isAiFirstTurn();
+        String[][] fieldResponse = new String[rows][cols];
+        for (int i = 0; i < rows; i++) {
+            for (int j = 0; j < cols; j++) {
+                int fieldCellValue = fieldMatrix[i][j];
+                switch (fieldCellValue) {
+                    case 0 -> fieldResponse[i][j] = " ";
+                    case 1 -> fieldResponse[i][j] = isAiCross ? "O" : "X";
+                    case 2 -> fieldResponse[i][j] = isAiCross ? "X" : "O";
+                    default -> throw new IllegalArgumentException("Incorrect field value");
+                }
+            }
+        }
+        return fieldResponse;
+    }
+
+    public static List<TurnRequest> getTurnsResponse(Game game) {
+        List<Turn> gameTurns = game.getTurns();
+        List<TurnRequest> turnsResponse = new ArrayList<>();
+        for (Turn turn : gameTurns) {
+            int row = turn.getPosition().getRow() + 1;
+            int col = turn.getPosition().getCol() + 1;
+            String player = turn.getPlayer().getPlayerName();
+            turnsResponse.add(new TurnRequest(row, col, player));
+        }
+        return turnsResponse;
+    }
+
+    public static String getCurrentPlayerResponse(Game game) {
+        return game.getTurnOrder().getPlayerName();
+    }
+
+    public static String getResultResponse(Game game) {
+        return game.getResult().getResultString();
+    }
+
+    public static Field getFieldGame(WebDTO gameResponse) {
+        String[][] field = gameResponse.getField();
+        int rows = field.length;
+        int cols = field[rows - 1].length;
+        boolean isAiCross = gameResponse.isAiFirstTurn();
+        if (rows != cols) {
+            throw new IllegalArgumentException("Incorrect field size");
+        }
+        Field gameField = new Field();
+        for (int i = 0; i < rows; i++) {
+            for (int j = 0; j < cols; j++) {
+                if (field[i].length != rows) {
+                    throw new IllegalArgumentException("Incorrect field size");
+                }
+                String cell = field[i][j];
+                FieldPosition position = new FieldPosition(i, j);
+                switch (cell) {
+                    case "X" -> gameField.setFieldValue(position, isAiCross ? 2 : 1);
+                    case "O" -> gameField.setFieldValue(position, isAiCross ? 1 : 2);
+                    case " " -> gameField.setFieldValue(position, 0);
+                    default -> throw new IllegalArgumentException("Incorrect field value");
+                }
+            }
+        }
+        return gameField;
+    }
+
+    public static List<Turn> getTurnsGame(WebDTO gameResponse) {
+        List<Turn> gameTurns = new ArrayList<>();
+        List<TurnRequest> responseTurns = gameResponse.getTurns();
+        for (TurnRequest turn : responseTurns) {
+            Turn turnGame = getTurnGame(turn);
+            gameTurns.add(turnGame);
+        }
+        return gameTurns;
+    }
+
+    public static Turn getTurnGame(TurnRequest turnInfo) {
+        int row = turnInfo.getRow() - 1;
+        int col = turnInfo.getCol() - 1;
+        String playerName = turnInfo.getPlayer();
+        PlayerEnum player;
+        switch (playerName) {
+            case "Player" -> player = PlayerEnum.PLAYER;
+            case "AI" -> player = PlayerEnum.AI;
+            default -> throw new IllegalArgumentException("Incorrect turn player");
+        }
+        return new Turn(
+                new FieldPosition(row, col),
+                player
+        );
+    }
+
+
+    public static PlayerEnum getPlayerGame(WebDTO gameResponse) {
+        return switch (gameResponse.getCurrentPlayer().toLowerCase()) {
+            case "player" -> PlayerEnum.PLAYER;
+            case "ai" -> PlayerEnum.AI;
+            default -> throw new IllegalArgumentException("Incorrect player type");
+        };
+    }
+
+
+    public static GameResult getResultGame(WebDTO gameResponse) {
+        return switch (gameResponse.getResult().toLowerCase()) {
+            case "processing" -> GameResult.PROCESSING;
+            case "draw" -> GameResult.DRAW;
+            case "ai won" -> GameResult.AI_WON;
+            case "player won" -> GameResult.PLAYER_WON;
+            default -> throw new IllegalArgumentException("Incorrect result type");
+        };
+    }
+}
+package tictactoe.web.controller;
+
+
+import tictactoe.domain.model.Game;
+import tictactoe.domain.model.Turn;
+
+import tictactoe.domain.service.GameService;
+import tictactoe.datasource.service.GameRepositoryService;
+import org.springframework.web.bind.annotation.*;
+import tictactoe.web.mapper.WebDTOMapper;
+import tictactoe.web.model.TurnRequest;
+import tictactoe.web.model.WebDTO;
+
+import java.util.List;
+
+import java.util.UUID;
+
+
+@RestController
+@RequestMapping("/game")
+@CrossOrigin(origins = "*")
+public class GameController {
+    private final GameService gameService;
+
+    public GameController(GameRepositoryService repositoryService, GameService gameService) {
+        this.gameService = gameService;
+    }
+
+    @PostMapping("/create")
+    public WebDTO createGame() {
+        return gameService.createGame();
+
+    }
+
+    @GetMapping("/{gameId}")
+    public WebDTO getGame(@PathVariable("gameId") UUID id) {
+        return gameService.getGame(id);
+    }
+
+    @PostMapping("/{gameId}/move")
+    public WebDTO makeMove(@PathVariable("gameId") UUID id, @RequestBody TurnRequest request) {
+        return gameService.makeTurn(id, request);
+    }
+
+    @GetMapping("/all")
+    public List<WebDTO> getAllGames() {
+        return gameService.getAllGames();
+    }
+}
+package tictactoe.web.controller;
+
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import tictactoe.domain.service.AuthService;
+import tictactoe.web.model.SignUpRequest;
+
+
+import javax.naming.AuthenticationException;
+import java.util.UUID;
+
+@RestController
+@RequestMapping("/auth")
+@CrossOrigin(origins = "*")
+public class AuthController {
+    private AuthService authService;
+
+    public AuthController(AuthService authService) {
+        this.authService = authService;
+    }
+
+
+    @PostMapping("signup")
+    public ResponseEntity<String> signUp(@RequestBody SignUpRequest credentials) {
+        boolean registrationStatus = authService.signUpUser(credentials);
+        if (!registrationStatus) {
+            return ResponseEntity.status(409).body("Registration failed!");
+        }
+        return ResponseEntity.status(201).body("Success!");
+    }
+
+
+    @PostMapping("login")
+    public UUID signIn(@RequestHeader("Authorization") String authHeader) throws AuthenticationException {
+        return authService.signInUser(authHeader);
+    }
+}
+package tictactoe;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class Application {
+    public static void main(String[] args) {
+        SpringApplication.run(Application.class, args);
+    }
+}package tictactoe.domain.model;
+
+import lombok.Getter;
+
+@Getter
+public enum GameResult {
+    AI_WON("AI won"),
+    PLAYER_WON("Player won"),
+    DRAW("Draw"),
+    PROCESSING("Processing");
+
+    String resultString;
+
+    GameResult(String result) {
+        this.resultString = result;
+    }
+
+}
+package tictactoe.domain.model;
+
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.ServletRequest;
+import jakarta.servlet.ServletResponse;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.filter.GenericFilterBean;
+import tictactoe.domain.service.AuthService;
+
+import java.io.IOException;
+import java.util.Collections;
+import java.util.UUID;
+
+
+public class AuthFilter extends GenericFilterBean {
+    AuthService authService;
+    PasswordEncoder passwordEncoder;
+
+    public AuthFilter(AuthService authService, PasswordEncoder passwordEncoder) {
+        this.authService = authService;
+        this.passwordEncoder = passwordEncoder;
+    }
+
+    @Override
+    public void doFilter(ServletRequest request, ServletResponse response, FilterChain filterChain) throws IOException, ServletException {
+        HttpServletRequest mappedRequest = (HttpServletRequest) request;
+        HttpServletResponse mappedResponse = (HttpServletResponse) response;
+        String path = mappedRequest.getRequestURI();
+
+        if ("OPTIONS".equalsIgnoreCase(mappedRequest.getMethod())) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        if (path.startsWith("/auth/")) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        try {
+            String headerAuthString = mappedRequest.getHeader("Authorization");
+            UUID userId = authService.signInUser(headerAuthString);
+            UsernamePasswordAuthenticationToken authentication =
+                    new UsernamePasswordAuthenticationToken(userId, null, Collections.emptyList());
+            SecurityContextHolder.getContext().setAuthentication(authentication);
+            filterChain.doFilter(request, response);
+        } catch (BadCredentialsException e) {
+            mappedResponse.sendError(401, e.getMessage());
+        }
+    }
+}
+package tictactoe.domain.model;
+
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+
+@Getter
+@AllArgsConstructor
+public class FieldPosition {
+    private int row;
+    private int col;
+}package tictactoe.domain.model;
+
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+import java.util.Optional;
+import java.util.UUID;
+
+@Setter
+@Getter
+@NoArgsConstructor
+public class User {
+    private UUID userId;
+    private String login;
+
+    public User(String login) {
+        this.userId = null;
+        this.login = login;
+    }
+
+
+    public Optional<UUID> getUserId() {
+        return Optional.ofNullable(this.userId);
+    }
+}
+package tictactoe.domain.model;
+
+import lombok.Builder;
+import lombok.Getter;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.UUID;
+
+
+
+@Getter
+public class Game {
+    private final UUID gameId;
+    private final Field field;
+    private final List<Turn> turns;
+    private PlayerEnum turnOrder;
+    private GameResult result;
+
+    public Game() {
+        this.gameId = null;
+        this.field = new Field();
+        this.turns = new ArrayList<>();
+        this.turnOrder = PlayerEnum.getRandomTurnOrder();
+        this.result = GameResult.PROCESSING;
+    }
+
+    public Game(UUID gameId, Field field, List<Turn> turns, PlayerEnum turnOrder, GameResult result) {
+        this.gameId = gameId;
+        this.field = field;
+        this.turns = turns != null ? new ArrayList<>(turns) : new ArrayList<>();
+        this.turnOrder = turnOrder;
+        this.result = result;
+    }
+
+    public List<Turn> getTurns() {
+        return Collections.unmodifiableList(turns);
+    }
+
+    public boolean isAiFirstTurn() {
+        if (this.turns.isEmpty()) {
+            return this.turnOrder.isAiTurn();
+        }
+        return this.turns.getFirst().getPlayer().isAiTurn();
+    }
+
+    public Game simulateTurn(FieldPosition posOfTurn, PlayerEnum player) {
+        boolean isAiTurn = player.isAiTurn();
+        Turn newTurn = new Turn(posOfTurn, player);
+        if (this.turnOrder != newTurn.getPlayer()) {
+            throw new IllegalStateException("Wrong player's turn.");
+        }
+        Field newField = Field.getFieldCopy(this.field);
+        List<Turn> turns = new ArrayList<>(this.turns);
+        turns.add(newTurn);
+        newField.setFieldValue(posOfTurn, isAiTurn ? 2: 1);
+        PlayerEnum turn = isAiTurn ? PlayerEnum.PLAYER : PlayerEnum.AI;
+        return new Game(
+                this.gameId,
+                newField,
+                turns,
+                turn,
+                this.result
+        );
+    }
+
+
+}package tictactoe.domain.model;
+
+import lombok.Getter;
+
+import java.util.concurrent.ThreadLocalRandom;
+
+@Getter
+public enum PlayerEnum{
+    PLAYER(false, "Player"),
+    AI(true, "AI");
+
+    boolean isAiTurn;
+    String playerName;
+
+    PlayerEnum(boolean isAiTurn, String playerName) {
+        this.isAiTurn = isAiTurn;
+        this.playerName = playerName;
+    }
+
+    public static PlayerEnum getRandomTurnOrder() {
+        return values()[ThreadLocalRandom.current().nextInt(values().length)];
+    }
+
+}
+package tictactoe.domain.model;
+
+import java.util.List;
+
+public class GameRules {
+    private static final int EMPTY_CELL = 0;
+
+    public static GameResult checkGameEnd(Game game) {
+        Field field = game.getField();
+        List<Turn> turns = game.getTurns();
+        if (turns.isEmpty()) {
+            return GameResult.PROCESSING;
+        }
+        if (game.getResult() != GameResult.PROCESSING) {
+            return game.getResult();
+        }
+
+        Turn turn = turns.getLast();
+        FieldPosition turnPosition = turn.getPosition();
+        boolean resHorizontal = checkHorizontal(field, turnPosition);
+        if (resHorizontal) {
+            return turn.getPlayer().isAiTurn() ? GameResult.AI_WON : GameResult.PLAYER_WON;
+        }
+        boolean resVertical = checkVertical(field, turnPosition);
+        if (resVertical) {
+            return turn.getPlayer().isAiTurn() ? GameResult.AI_WON : GameResult.PLAYER_WON;
+        }
+        if ((turnPosition.getCol() == turnPosition.getRow())
+                || ((turnPosition.getRow() + turnPosition.getCol()) == (field.getRows() - 1))) {
+            if (checkDiagonals(field, turnPosition)) {
+                return turn.getPlayer().isAiTurn() ? GameResult.AI_WON : GameResult.PLAYER_WON;
+            }
+        }
+        if (turns.size() == (field.getRows() * field.getCols())) {
+            return GameResult.DRAW;
+        }
+        return GameResult.PROCESSING;
+    }
+
+    private static boolean checkHorizontal(Field field, FieldPosition position) {
+        int row = position.getRow();
+        int horizontalStartValue = field.getFieldValue(new FieldPosition(row, 0));
+
+        if (horizontalStartValue == EMPTY_CELL) {
+            return false;
+        }
+
+        for (int col = 1; col < field.getCols(); col++) {
+            if (horizontalStartValue != field.getFieldValue(new FieldPosition(row, col))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean checkVertical(Field field, FieldPosition position) {
+        int col = position.getCol();
+        int verticalStartValue = field.getFieldValue(new FieldPosition(0, col));
+
+        if (verticalStartValue == EMPTY_CELL) {
+            return false;
+        }
+
+        for (int row = 1; row < field.getRows(); row++) {
+            if (verticalStartValue != field.getFieldValue(new FieldPosition(row, col))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean checkDiagonals(Field field, FieldPosition position) {
+        int startMainDiagonalValue = field.getFieldValue(new FieldPosition(0,0));
+        int startSecondaryDiagonalValue = field.getFieldValue(new FieldPosition(0, field.getCols() - 1));
+
+        boolean resMain = true;
+        boolean resSecondary = true;
+
+        if (startMainDiagonalValue == EMPTY_CELL) {
+            resMain = false;
+        } else {
+            for (int i = 1; i < field.getRows(); i++) {
+                if (startMainDiagonalValue != field.getFieldValue(new FieldPosition(i, i))) {
+                    resMain = false;
+                    break;
+                }
+            }
+        }
+        if (startSecondaryDiagonalValue == EMPTY_CELL) {
+            resSecondary = false;
+        } else {
+            for (int j = 1; j < field.getRows(); j++) {
+                if (startSecondaryDiagonalValue != field.getFieldValue(new FieldPosition(j, field.getRows() - 1 - j))) {
+                    resSecondary = false;
+                    break;
+                }
+            }
+        }
+
+        return (resMain || resSecondary);
+    }
+}
+package tictactoe.domain.model;
+
+import lombok.Builder;
+import lombok.Getter;
+
+@Getter
+public class Field {
+    private static final int rows = 3;
+    private static final  int cols = 3;
+    private final int[][] fieldMatrix;
+
+    public Field() {
+        this.fieldMatrix = new int[rows][cols];
+    }
+
+    public int getRows() {
+        return rows;
+    }
+
+    public int getCols() {
+        return cols;
+    }
+
+
+    public int[][] getFieldMatrix() {
+        int[][] fieldCopy = new int[rows][cols];
+        for (int i = 0; i < this.rows; i++) {
+            System.arraycopy(fieldMatrix[i], 0, fieldCopy[i], 0, this.cols);
+        }
+        return fieldCopy;
+    }
+
+    public static Field getFieldCopy(Field original) {
+        Field copy = new Field();
+        int[][] src = original.getFieldMatrix();
+        for (int i = 0; i < original.getRows(); i++) {
+            System.arraycopy(src[i], 0, copy.fieldMatrix[i], 0, original.getCols());
+        }
+        return copy;
+    }
+
+
+    public boolean setFieldValue(FieldPosition turnPos, int turn) {
+        int row = turnPos.getRow();
+        int col = turnPos.getCol();
+        if (row > rows - 1 || row < 0 || col > cols - 1 || col < 0) {
+            return false;
+        }
+        if (this.fieldMatrix[row][col] != 0) {
+            return false;
+        }
+        if (turn < 1 || turn > 2) {
+            return false;
+        }
+        this.fieldMatrix[row][col] = turn;
+        return true;
+    }
+
+    public int getFieldValue(FieldPosition position) {
+        int row = position.getRow();
+        int col = position.getCol();
+        if (row > rows - 1 || row < 0 || col > cols - 1 || col < 0) {
+            throw new IllegalArgumentException(
+                    String.format("Incorrect coordinates [%d %d]. Range: row [0-%d], col[0-%d]",
+                            row,
+                            col,
+                            this.rows - 1,
+                            this.cols - 1)
+            );
+        }
+        return fieldMatrix[position.getRow()][position.getCol()];
+    }
+}package tictactoe.domain.model;
+
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+
+@AllArgsConstructor
+@Getter
+public class Turn {
+    private FieldPosition position;
+    private PlayerEnum player;
+}
+package tictactoe.domain.service;
+
+import tictactoe.datasource.model.UserEntity;
+import tictactoe.domain.model.User;
+
+import java.util.Optional;
+
+public interface UserInterface {
+    public boolean createUser(User user, String hashPassword);
+
+    public Optional<UserEntity> getUser(String login);
+}
+package tictactoe.domain.service;
+
+import jakarta.transaction.Transactional;
+import tictactoe.datasource.service.GameRepositoryService;
+import tictactoe.domain.model.*;
+import tictactoe.web.mapper.WebDTOMapper;
+import tictactoe.web.model.TurnRequest;
+import tictactoe.web.model.WebDTO;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
+
+public class GameService implements GameInterface {
+    GameRepositoryService repositoryService;
+    AiService aiService;
+
+    public GameService(GameRepositoryService repositoryService, AiService aiService) {
+        this.repositoryService = repositoryService;
+        this.aiService = aiService;
+    }
+
+    private final int emptyCell = 0;
+    private final int playerTurn = 1;
+    private final int aiTurn = 2;
+
+
+    @Transactional
+    public WebDTO createGame() {
+        Game game = firstAiTurn(new Game());
+        return WebDTOMapper.toResponse(repositoryService.saveOrUpdateGame(game));
+    }
+
+    public Game firstAiTurn(Game game) {
+        if (game.getTurnOrder() == PlayerEnum.AI) {
+            Turn aiTurn = getNextTurn(game);
+            return processAndCheckTurn(game, aiTurn);
+        }
+        return game;
+    }
+
+    public WebDTO getGame(UUID id) {
+       Game game = repositoryService.getGameById(id);
+       return WebDTOMapper.toResponse(game);
+    }
+
+    public List<WebDTO> getAllGames(){
+        List<Game> allGames = repositoryService.getAllGames();
+        return allGames.stream().map(WebDTOMapper::toResponse).toList();
+    }
+
+    @Transactional
+    public WebDTO makeTurn(UUID id, TurnRequest turnRequest) {
+        Game game = repositoryService.getGameById(id);
+        Turn turn = WebDTOMapper.toTurnGame(turnRequest);
+        if (game.getResult() != GameResult.PROCESSING) {
+            throw new IllegalStateException("This game is finished: " + game.getResult().getResultString());
+        }
+
+        if (game.getTurnOrder() != PlayerEnum.PLAYER) {
+            throw  new IllegalStateException("It's not your turn to move right now.");
+        }
+
+        if (!isValidMove(game.getField(), turn)) {
+            throw new IllegalArgumentException("Incorrect turn. Try again.");
+        }
+
+        Game gameWithPlayerTurn = repositoryService.saveOrUpdateGame(processAndCheckTurn(game, turn));
+        if (gameWithPlayerTurn.getResult() != GameResult.PROCESSING) {
+            return WebDTOMapper.toResponse(gameWithPlayerTurn);
+        }
+
+        Turn aiTurn = getNextTurn(gameWithPlayerTurn);
+        Game newTurnGame = repositoryService.saveOrUpdateGame(processAndCheckTurn(gameWithPlayerTurn, aiTurn));
+        return WebDTOMapper.toResponse(newTurnGame);
+
+    }
+
+    private Game processAndCheckTurn(Game currentGame, Turn turn) {
+        GameResult beforeResult = checkGameEnd(currentGame);
+        if (beforeResult != GameResult.PROCESSING) {
+            return finalizeGame(currentGame, beforeResult);
+        }
+        FieldPosition pos = turn.getPosition();
+        PlayerEnum player = turn.getPlayer();
+        Game nextGame = currentGame.simulateTurn( pos, player);
+        GameResult result = checkGameEnd(nextGame);
+        return (result != GameResult.PROCESSING) ? finalizeGame(nextGame, result) : nextGame;
+    }
+
+    public boolean isValidMove(Field field, Turn turn) {
+        FieldPosition position = turn.getPosition();
+        return (field.getFieldValue(position) == 0);
+    }
+
+    @Override
+    public Turn getNextTurn(Game game) {
+        return aiService.calculateBestTurn(game);
+    }
+
+    @Override
+    public GameResult checkGameEnd(Game game) {
+        return GameRules.checkGameEnd(game);
+    }
+
+    @Override
+    public boolean validateField(Game game) {
+        List<Turn> turns = game.getTurns();
+        Field field = game.getField();
+        Field restoredField = new Field();
+        for (Turn turn: turns) {
+            restoredField.setFieldValue(turn.getPosition(), turn.getPlayer().isAiTurn() ? aiTurn : playerTurn);
+        }
+        for (int i = 0; i < field.getRows(); i++) {
+            for (int j = 0; j < field.getCols(); j++) {
+                FieldPosition pos = new FieldPosition(i, j);
+                if (field.getFieldValue(pos) != restoredField.getFieldValue(pos)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+
+
+    private Game finalizeGame(Game game, GameResult result) {
+        return new Game(
+                game.getGameId(),
+                game.getField(),
+                game.getTurns(),
+                game.getTurnOrder(),
+                result
+        );
+    }
+}package tictactoe.domain.service;
+
+
+import tictactoe.domain.model.Game;
+import tictactoe.domain.model.GameResult;
+import tictactoe.domain.model.Turn;
+
+public interface GameInterface {
+
+    Turn getNextTurn(Game game);
+
+    boolean validateField(Game game);
+
+    GameResult checkGameEnd(Game game);
+}package tictactoe.domain.service;
+
+
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import tictactoe.datasource.model.UserEntity;
+import tictactoe.domain.model.User;
+import tictactoe.web.mapper.UserRequestMapper;
+import tictactoe.web.model.SignUpRequest;
+
+import java.util.Base64;
+import java.util.Optional;
+import java.util.UUID;
+
+
+public class AuthService {
+    private final PasswordEncoder passwordEncoder;
+    private final UserService userService;
+
+    public AuthService(PasswordEncoder passwordEncoder, UserService userService) {
+        this.passwordEncoder = passwordEncoder;
+        this.userService = userService;
+    }
+
+    private String GetHashPassword(String password) {
+        return passwordEncoder.encode(password);
+    }
+
+    public boolean signUpUser(SignUpRequest credentials) {
+        try {
+            User user = UserRequestMapper.toUser(credentials);
+            String hashPassword = GetHashPassword(credentials.getPassword());
+            return userService.createUser(user, hashPassword);
+        } catch (DataIntegrityViolationException e) {
+            return false;
+        }
+    }
+
+    public UUID signInUser(String base64Credentials) {
+        String[] credentials = decodeCredentials(base64Credentials);
+        String login = credentials[0];
+        String password = credentials[1];
+        Optional<UserEntity> optionalEntity = userService.getUser(login);
+        if (optionalEntity.isPresent() && passwordEncoder.matches(password, optionalEntity.get().getHashedPassword())) {
+            return optionalEntity.get().getUserId();
+        }
+        throw new BadCredentialsException("Invalid login or password");
+    }
+
+    public static String[] decodeCredentials(String authHeader){
+        if (authHeader == null || !authHeader.startsWith("Basic ")) {
+            throw new BadCredentialsException("Invalid credentials format");
+        }
+        String base64Credentials = authHeader.substring(6);
+        byte[] decodedData = Base64.getDecoder().decode(base64Credentials);
+        String data = new String(decodedData);
+        String[] credentials = data.split(":");
+        if (credentials.length != 2 || credentials[0].isBlank() || credentials[1].isBlank()) {
+            throw new BadCredentialsException("Invalid credentials format");
+        }
+        return  credentials;
+    }
+
+
+}
+package tictactoe.domain.service;
+
+import tictactoe.domain.model.*;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
+
+
+public class AiService {
+    private final int emptyCell = 0;
+
+    public Turn calculateBestTurn(Game game) {
+        int bestScore = Integer.MIN_VALUE;
+        Field field = game.getField();
+        List<Turn> bestTurns = new ArrayList<>();
+
+        for (int i = 0; i < field.getRows(); i++) {
+            for (int j = 0; j < field.getCols(); j++) {
+
+                FieldPosition currentPosition = new FieldPosition(i, j);
+                if (field.getFieldValue(new FieldPosition(i, j)) == emptyCell) {
+
+                    Game newGame = game.simulateTurn(currentPosition, game.getTurnOrder());
+                    Turn possibleTurn = newGame.getTurns().getLast();
+                    int rating = minMax(newGame, 0);
+
+                    if (rating > bestScore) {
+                        bestScore = rating;
+                        bestTurns.clear();
+                        bestTurns.add(possibleTurn);
+
+                    } else if (rating == bestScore) {
+                        bestTurns.add(possibleTurn);
+                    }
+                }
+            }
+        }
+        if (bestTurns.isEmpty()) {
+            throw new IllegalStateException("No moves available");
+        }
+        return bestTurns.get(ThreadLocalRandom.current().nextInt(bestTurns.size()));
+    }
+
+    private int minMax(Game game, int depth) {
+        GameResult result = GameRules.checkGameEnd(game);
+        Field field = game.getField();
+        switch (result) {
+            case AI_WON -> {
+                return 10 - depth;
+            }
+            case PLAYER_WON -> {
+                return  -10 + depth;
+            }
+            case DRAW -> {
+                return 0;
+            }
+            case PROCESSING -> {
+                boolean isAiTurn = game.getTurnOrder().isAiTurn();
+                int bestScore = isAiTurn ? Integer.MIN_VALUE : Integer.MAX_VALUE;
+
+                for (int i = 0; i < field.getRows(); i++) {
+                    for (int j = 0; j < field.getCols(); j++) {
+                        FieldPosition currPos = new FieldPosition(i, j);
+                        if (field.getFieldValue(currPos) == emptyCell) {
+                            Game simulatedGame = game.simulateTurn(currPos, game.getTurnOrder());
+                            int rating = minMax(simulatedGame, depth + 1);
+                            bestScore = isAiTurn ? Math.max(rating, bestScore) : Math.min(rating, bestScore);
+                        }
+                    }
+                }
+                return bestScore;
+            }
+        }
+        throw new IllegalStateException("Minimax reached unreachable state for game: " + game.getGameId());
+    }
+
+}
+package tictactoe.domain.service;
+
+import tictactoe.datasource.mapper.UserMapper;
+import tictactoe.datasource.model.UserEntity;
+import tictactoe.datasource.repository.UserRepository;
+import tictactoe.domain.model.User;
+
+import java.util.Optional;
+
+public class UserService implements UserInterface{
+    private UserRepository userRepository;
+
+    public UserService(UserRepository userRepository) {
+        this.userRepository = userRepository;
+    }
+
+    @Override
+    public boolean createUser(User user, String hashPassword) {
+        UserEntity newUser = UserMapper.toEntity(user, hashPassword);
+        userRepository.save(newUser);
+        return true;
+    }
+
+    @Override
+    public Optional<UserEntity> getUser(String login) {
+        return userRepository.findByLogin(login);
+    }
+
+}
+package tictactoe.datasource.model;
+
+import jakarta.persistence.*;
+import lombok.*;
+import tictactoe.domain.model.*;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
+
+
+@Entity
+@Table(name = "games")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class GameEntity {
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID gameId;
+
+    @Column(name = "field_state", nullable = false, length = 9)
+    @Builder.Default
+    private String fieldState = "000000000";
+
+    @OneToMany(mappedBy = "game", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    private List<TurnEntity> turnsHistory = new ArrayList<>();
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "current_player", nullable = false)
+    private PlayerEnum currentPlayer;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "result", nullable = false)
+    private GameResult result;
+
+}package tictactoe.datasource.model;
+
+import jakarta.persistence.*;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import lombok.*;
+
+
+
+import java.util.UUID;
+
+@Entity
+@Table(name = "turns")
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+@Getter
+@Setter
+public class TurnEntity {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long turnId;
+
+    @Column(name="turn_row", nullable = false)
+    private int row;
+
+    @Column(name="turn_col", nullable = false)
+    private int col;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "player", nullable = false)
+    private PlayerEnum player;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "game_id", nullable = false)
+    private GameEntity game;
+
+}
+package tictactoe.datasource.model;
+
+
+import jakarta.persistence.*;
+import lombok.*;
+
+import java.util.UUID;
+
+@Entity
+@Table(name = "users")
+@AllArgsConstructor
+@NoArgsConstructor
+@Getter
+@Setter
+public class UserEntity {
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID userId;
+
+    @Column(name = "login", nullable = false, unique = true)
+    private String login;
+
+    @Column(name = "password_hash", nullable = false)
+    private String hashedPassword;
+}
+package tictactoe.datasource.service;
+
+
+import org.springframework.transaction.annotation.Transactional;
+
+import tictactoe.datasource.mapper.GameMapper;
+import tictactoe.datasource.model.GameEntity;
+import tictactoe.datasource.repository.GameRepository;
+import tictactoe.datasource.repository.UserRepository;
+import tictactoe.domain.model.Game;
+
+import java.util.*;
+import java.util.stream.StreamSupport;
+
+public class GameRepositoryService {
+    private final GameRepository gameRepository;
+
+    public GameRepositoryService(GameRepository gameRepository) {
+        this.gameRepository = gameRepository;
+    }
+
+    @Transactional
+    public Game saveOrUpdateGame(Game game) {
+        if (game.getGameId() == null) {
+            GameEntity entity = GameMapper.toEntity(game);
+            gameRepository.save(entity);
+            return GameMapper.toGame(entity);
+        } else {
+            GameEntity entity = gameRepository.findById(game.getGameId()).orElseThrow(
+                    () -> new NoSuchElementException("Game not found")
+            );
+            GameMapper.updateEntity(entity, game);
+            gameRepository.save(entity);
+            return GameMapper.toGame(entity);
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public Game getGameById(UUID gameId) {
+        Optional<GameEntity> game = gameRepository.findById(gameId);
+        if (game.isPresent()) {
+            GameEntity entity = game.get();
+            return GameMapper.toGame(entity);
+        }
+        throw new NoSuchElementException(String.format("Game with ID %s not found", gameId.toString()));
+    }
+
+    @Transactional(readOnly = true)
+    public List<Game> getAllGames() {
+        return StreamSupport.stream(gameRepository.findAll()
+                .spliterator(), false)
+                .map(GameMapper::toGame)
+                .toList();
+
+    }
+}
+package tictactoe.datasource.mapper;
+
+import tictactoe.datasource.model.UserEntity;
+import tictactoe.domain.model.User;
+
+public class UserMapper {
+    public static UserEntity toEntity(User user, String hashPassword) {
+        UserEntity entity = new UserEntity();
+        entity.setLogin(user.getLogin());
+        entity.setHashedPassword(hashPassword);
+        return entity;
+    }
+
+    public static User toUser(UserEntity entity) {
+        User user = new User();
+        user.setUserId(entity.getUserId());
+        user.setLogin(entity.getLogin());
+        return user;
+    }
+}
+package tictactoe.datasource.mapper;
+
+import tictactoe.datasource.model.GameEntity;
+import tictactoe.datasource.model.TurnEntity;
+import tictactoe.domain.model.Field;
+import tictactoe.domain.model.FieldPosition;
+import tictactoe.domain.model.Game;
+import tictactoe.domain.model.Turn;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
+public class GameMapper {
+
+    public static Game toGame(GameEntity entity) {
+        return new Game(
+                entity.getGameId(),
+                getFieldFromEntity(entity),
+                getTurnsFromEntity(entity),
+                entity.getCurrentPlayer(),
+                entity.getResult()
+        );
+    }
+
+    public static GameEntity toEntity(Game game) {
+        GameEntity entity = new GameEntity();
+        if (game.getGameId() != null) {
+            entity.setGameId(game.getGameId());
+        }
+
+        entity.setFieldState(getFieldStateFromGame(game));
+        entity.setCurrentPlayer(game.getTurnOrder());
+        entity.setResult(game.getResult());
+        entity.setTurnsHistory(getTurnsFromGame(game, entity));
+        return entity;
+    }
+
+    public static void updateEntity(GameEntity entity, Game game) {
+        entity.setFieldState(getFieldStateFromGame(game));
+        entity.setResult(game.getResult());
+        entity.setCurrentPlayer(game.getTurnOrder());
+        List<TurnEntity> existingTurns = entity.getTurnsHistory();
+        List<Turn> domainTurns = game.getTurns();
+        if (existingTurns.size() < domainTurns.size()) {
+            for (int i = existingTurns.size(); i < domainTurns.size(); i++) {
+                Turn domainTurn = domainTurns.get(i);
+                TurnEntity newTurn = TurnEntity.builder()
+                        .row(domainTurn.getPosition().getRow())
+                        .col(domainTurn.getPosition().getCol())
+                        .player(domainTurn.getPlayer())
+                        .game(entity)
+                        .build();
+                existingTurns.add(newTurn);
+            }
+        }
+    }
+
+    private static Field getFieldFromEntity(GameEntity entity) {
+        String fieldState = entity.getFieldState();
+        Field gameField = new Field();
+
+        for (int i = 0; i < fieldState.length(); i++) {
+            char cell = fieldState.charAt(i);
+            int cellValue = cell - '0';
+            FieldPosition pos = new FieldPosition(i / gameField.getRows(), i % gameField.getCols());
+            gameField.setFieldValue(pos, cellValue);
+        }
+        return gameField;
+    }
+
+    private static List<Turn> getTurnsFromEntity(GameEntity entity) {
+        List<Turn> turns = new ArrayList<>();
+        List<TurnEntity> turnsHistory = entity.getTurnsHistory();
+        for (TurnEntity turn: turnsHistory) {
+            FieldPosition pos = new FieldPosition(turn.getRow(), turn.getCol());
+            turns.add(new Turn(pos, turn.getPlayer()));
+        }
+        return turns;
+    }
+
+    private static String getFieldStateFromGame(Game game) {
+        StringBuilder fieldState = new StringBuilder();
+        Field field = game.getField();
+        int[][] matrix = field.getFieldMatrix();
+        for (int i = 0; i < field.getRows(); i++) {
+            StringBuilder row = new StringBuilder();
+            for (int j = 0; j < field.getCols(); j++) {
+                row.append(matrix[i][j]);
+            }
+            fieldState.append(row.toString());
+        }
+        return fieldState.toString();
+    }
+
+    private static List<TurnEntity> getTurnsFromGame(Game game, GameEntity entity) {
+        List<TurnEntity> turnEntities = new ArrayList<>();
+        for (Turn turn : game.getTurns()) {
+            TurnEntity turnEntity = TurnEntity.builder()
+                    .row(turn.getPosition().getRow())
+                    .col(turn.getPosition().getCol())
+                    .player(turn.getPlayer())
+                    .game(entity)
+                    .build();
+            turnEntities.add(turnEntity);
+        }
+
+        return turnEntities;
+    }
+
+
+}
+package tictactoe.datasource.repository;
+
+
+import org.springframework.data.repository.CrudRepository;
+import org.springframework.stereotype.Repository;
+
+import tictactoe.datasource.model.GameEntity;
+
+
+import java.util.UUID;
+
+@Repository
+public interface GameRepository extends CrudRepository<GameEntity, UUID> {
+
+}
+package tictactoe.datasource.repository;
+
+import org.springframework.data.repository.CrudRepository;
+import org.springframework.stereotype.Repository;
+import tictactoe.datasource.model.UserEntity;
+
+import java.util.Optional;
+import java.util.UUID;
+
+@Repository
+public interface UserRepository extends CrudRepository<UserEntity, UUID> {
+    Optional<UserEntity> findByLogin(String login);
+}

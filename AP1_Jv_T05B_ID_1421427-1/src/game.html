@@ -1,0 +1,1329 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Крестики-Нолики Онлайн</title>
+    <style>
+        :root {
+            color-scheme: dark;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, Helvetica, sans-serif;
+            background: #0f172a;
+            color: #e5e7eb;
+        }
+
+        button {
+            border: none;
+            border-radius: 10px;
+            padding: 10px 14px;
+            cursor: pointer;
+            background: #2563eb;
+            color: white;
+            font-size: 14px;
+        }
+
+        button:hover {
+            opacity: 0.92;
+        }
+
+        button:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+        }
+
+        input {
+            width: 100%;
+            margin: 8px 0;
+            padding: 10px 12px;
+            border-radius: 10px;
+            border: 1px solid #334155;
+            background: #020617;
+            color: white;
+            outline: none;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            padding: 16px 24px;
+            background: #020617;
+            border-bottom: 1px solid #1f2937;
+        }
+
+        .logo {
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        nav {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        main {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .panel {
+            background: #111827;
+            border: 1px solid #1f2937;
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .panel h2 {
+            margin-top: 0;
+            margin-bottom: 16px;
+        }
+
+        .auth-card,
+        .api-card {
+            max-width: 460px;
+            margin: 20px auto;
+            background: #111827;
+            border: 1px solid #1f2937;
+            border-radius: 16px;
+            padding: 20px;
+        }
+
+        .auth-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 14px;
+        }
+
+        .auth-tabs button {
+            flex: 1;
+            background: #1e293b;
+        }
+
+        .auth-tabs button.active {
+            background: #2563eb;
+        }
+
+        .tab-btn {
+            background: #1e293b;
+        }
+
+        .tab-btn.active {
+            background: #2563eb;
+        }
+
+        .list {
+            display: grid;
+            gap: 12px;
+        }
+
+        .card {
+            background: #020617;
+            border: 1px solid #1f2937;
+            border-radius: 12px;
+            padding: 14px;
+        }
+
+        .card-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+            flex-wrap: wrap;
+        }
+
+        .btn-small {
+            padding: 7px 10px;
+            font-size: 13px;
+        }
+
+        .empty {
+            color: #94a3b8;
+            padding: 8px 0;
+        }
+
+        .muted {
+            color: #94a3b8;
+        }
+
+        .error {
+            color: #f87171;
+            min-height: 22px;
+            margin-top: 10px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 12px;
+        }
+
+        th,
+        td {
+            text-align: left;
+            padding: 10px 8px;
+            border-bottom: 1px solid #1f2937;
+        }
+
+        th {
+            color: #cbd5e1;
+        }
+
+        .top-buttons {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(3, 84px);
+            gap: 8px;
+            justify-content: center;
+            margin: 20px auto;
+        }
+
+        .cell {
+            width: 84px;
+            height: 84px;
+            font-size: 38px;
+            font-weight: 800;
+            background: #1e293b;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+        }
+
+        .cell.x {
+            color: #38bdf8;
+        }
+
+        .cell.o {
+            color: #f97316;
+        }
+
+        .modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.72);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            width: min(95vw, 520px);
+            background: #111827;
+            border: 1px solid #1f2937;
+            border-radius: 16px;
+            padding: 24px;
+            position: relative;
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            background: #ef4444;
+            padding: 6px 10px;
+        }
+
+        .game-state {
+            font-weight: 700;
+            margin: 10px 0;
+        }
+
+        .game-players {
+            color: #cbd5e1;
+            margin-bottom: 10px;
+        }
+
+        .toast {
+            position: fixed;
+            right: 20px;
+            bottom: 20px;
+            z-index: 2000;
+            background: #111827;
+            border: 1px solid #2563eb;
+            color: #e5e7eb;
+            border-radius: 12px;
+            padding: 14px 18px;
+            max-width: 380px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+        }
+
+        .toast.error {
+            border-color: #ef4444;
+            color: #fecaca;
+        }
+
+        .invite-row {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 10px;
+            align-items: center;
+            margin-top: 12px;
+        }
+
+        @media (max-width: 700px) {
+            header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .invite-row {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+<header>
+    <div class="logo">✕◯✕ Крестики-Нолики Онлайн</div>
+
+    <nav id="mainNav" class="hidden">
+        <button class="tab-btn active" data-tab="lobby">🎮 Лобби</button>
+        <button class="tab-btn" data-tab="leaderboard">🏆 Рейтинг</button>
+        <button class="tab-btn" data-tab="profile">👤 Профиль</button>
+        <button id="logoutBtn">Выйти</button>
+    </nav>
+</header>
+
+<main>
+    <!-- AUTH -->
+    <section id="authScreen">
+        <div style="text-align: center; margin-top: 28px;">
+            <h1>Крестики-Нолики Онлайн</h1>
+            <p class="muted">Сразись с непобедимым ИИ или брось вызов друзьям</p>
+        </div>
+
+        <div class="auth-card">
+            <div class="auth-tabs">
+                <button id="showLogin" class="active">Вход</button>
+                <button id="showRegister">Регистрация</button>
+            </div>
+
+            <form id="loginForm">
+                <input
+                        id="loginLogin"
+                        placeholder="Логин"
+                        required
+                        minlength="2"
+                        maxlength="32"
+                        pattern="^\S+$"
+                        autocomplete="username"
+                >
+                <input
+                        id="loginPassword"
+                        type="password"
+                        placeholder="Пароль"
+                        required
+                        minlength="8"
+                        maxlength="64"
+                        pattern="^\S+$"
+                        autocomplete="current-password"
+                >
+                <button type="submit" style="width: 100%;">Войти</button>
+            </form>
+
+            <form id="registerForm" class="hidden">
+                <input
+                        id="regLogin"
+                        placeholder="Логин"
+                        required
+                        minlength="2"
+                        maxlength="32"
+                        pattern="^\S+$"
+                        autocomplete="username"
+                >
+                <input
+                        id="regPassword"
+                        type="password"
+                        placeholder="Пароль"
+                        required
+                        minlength="8"
+                        maxlength="64"
+                        pattern="^\S+$"
+                        autocomplete="new-password"
+                >
+                <button type="submit" style="width: 100%;">Зарегистрироваться</button>
+            </form>
+        </div>
+
+        <div class="api-card">
+            <h3>⚙ Адрес сервера API</h3>
+            <input id="apiUrlInput" placeholder="http://localhost:8080">
+            <button id="saveApiBtn" style="width: 100%;">Сохранить адрес</button>
+        </div>
+    </section>
+
+    <!-- LOBBY -->
+    <section id="lobbyScreen" class="hidden">
+        <div class="panel">
+            <h2>🎮 Новая игра</h2>
+
+            <button id="createAiBtn">🤖 Сыграть против ИИ</button>
+
+            <div class="invite-row">
+                <input id="inviteLoginInput" placeholder="Логин второго игрока">
+                <button id="invitePlayerBtn">👥 Пригласить игрока</button>
+            </div>
+
+            <p class="muted">
+                Как играть: собирайте 3 своих знака в ряд по горизонтали, вертикали или диагонали.
+                Первыми всегда ходят ✕. Игра с другом появится у соперника во вкладке «Приглашения».
+            </p>
+        </div>
+
+        <div class="panel">
+            <h2>
+                🔔 Приглашения
+                <button id="refreshInvitationsBtn" class="btn-small">⟳</button>
+            </h2>
+            <div id="invitationsList" class="list"></div>
+        </div>
+
+        <div class="panel">
+            <h2>
+                ⚔ Активные игры
+                <button id="refreshActiveBtn" class="btn-small">⟳</button>
+            </h2>
+            <div id="activeGamesList" class="list"></div>
+        </div>
+
+        <div class="panel">
+            <h2>
+                📜 Завершённые
+                <button id="refreshFinishedBtn" class="btn-small">⟳</button>
+            </h2>
+            <div id="finishedGamesList" class="list"></div>
+        </div>
+    </section>
+
+    <!-- LEADERBOARD -->
+    <section id="leaderboardScreen" class="hidden">
+        <div class="panel">
+            <h2>🏆 Таблица лидеров</h2>
+
+            <div class="top-buttons">
+                <button data-limit="5">Топ-5</button>
+                <button data-limit="10" class="active">Топ-10</button>
+                <button data-limit="25">Топ-25</button>
+                <button id="refreshLeaderboardBtn">⟳</button>
+            </div>
+
+            <table>
+                <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Игрок</th>
+                    <th>Побед</th>
+                    <th>Соотношение побед</th>
+                </tr>
+                </thead>
+                <tbody id="leaderboardBody"></tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- PROFILE -->
+    <section id="profileScreen" class="hidden">
+        <div class="panel">
+            <h2>👤 Профиль</h2>
+
+            <div id="profileInfo"></div>
+
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px;">
+                <button id="refreshProfileBtn">⟳ Обновить профиль</button>
+                <button id="rotateRefreshBtn">🔄 Обновить refresh token</button>
+            </div>
+        </div>
+    </section>
+</main>
+
+<!-- GAME MODAL -->
+<div id="gameModal" class="modal hidden">
+    <div class="modal-content">
+        <button id="closeGameModalBtn" class="modal-close">×</button>
+
+        <h2 id="gameModalTitle">Игра</h2>
+        <div id="gameModalState" class="game-state"></div>
+        <div id="gameModalPlayers" class="game-players"></div>
+
+        <div id="gameBoard" class="board"></div>
+
+        <div id="gameModalError" class="error"></div>
+    </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script>
+    const AI_ID = "00000000-0000-0000-0000-000000000000";
+    const DEFAULT_API_URL = "http://localhost:8080";
+
+    let apiBase = localStorage.getItem("apiUrl") || DEFAULT_API_URL;
+    let accessToken = localStorage.getItem("accessToken") || null;
+    let refreshToken = localStorage.getItem("refreshToken") || null;
+
+    let currentUser = null;
+    let currentGameId = null;
+    let leaderboardLimit = 10;
+    let currentTab = "lobby";
+
+    let gamePollTimer = null;
+    let listsPollTimer = null;
+    let toastTimer = null;
+
+    const $ = (selector) => document.querySelector(selector);
+    const $$ = (selector) => Array.from(document.querySelectorAll(selector));
+
+    function escapeHtml(value) {
+        return String(value ?? "")
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+            .replaceAll('"', "&quot;")
+            .replaceAll("'", "&#039;");
+    }
+
+    function shortUuid(value) {
+        return value ? String(value).slice(0, 8) : "";
+    }
+
+    function formatDate(value) {
+        if (!value) return "";
+
+        if (Array.isArray(value)) {
+            const [year, month, day, hour = 0, minute = 0, second = 0] = value;
+            return new Date(year, month - 1, day, hour, minute, second).toLocaleString();
+        }
+
+        const date = new Date(value);
+        return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
+    }
+
+    function playerDisplayName(id) {
+        if (!id) return "???";
+        if (id === AI_ID) return "AI";
+        if (currentUser && id === currentUser.id) return "Вы";
+        return shortUuid(id);
+    }
+
+    function formatGameState(game) {
+        const state = game.state || "";
+
+        if (state === "waiting...") return "Ожидание второго игрока...";
+        if (state === "Turning player") return "Идёт игра";
+        if (state === "Draw") return "Ничья";
+
+        if (state.startsWith("Won player")) {
+            const winner = state.replace("Won player", "").trim();
+            return `Победа игрока ${playerDisplayName(winner)}`;
+        }
+
+        if (state.startsWith("AI won")) {
+            return "Победа AI";
+        }
+
+        return state;
+    }
+
+    function showToast(message, isError = false) {
+        const toast = $("#toast");
+        toast.textContent = message;
+        toast.classList.remove("hidden");
+        toast.classList.toggle("error", isError);
+
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => {
+            toast.classList.add("hidden");
+        }, 3500);
+    }
+
+    function saveTokens(data) {
+        if (!data || !data.accessToken) return;
+
+        accessToken = data.accessToken;
+        refreshToken = data.refreshToken || null;
+
+        localStorage.setItem("accessToken", accessToken);
+
+        if (refreshToken) {
+            localStorage.setItem("refreshToken", refreshToken);
+        } else {
+            localStorage.removeItem("refreshToken");
+        }
+
+        localStorage.setItem("tokenType", data.type || "Bearer");
+    }
+
+    function clearAuth() {
+        accessToken = null;
+        refreshToken = null;
+        currentUser = null;
+
+        localStorage.removeItem("accessToken");
+        localStorage.removeItem("refreshToken");
+        localStorage.removeItem("tokenType");
+    }
+
+    async function parseApiError(response) {
+        let message = `HTTP ${response.status}`;
+
+        try {
+            const data = await response.json();
+            if (data && data.message) {
+                message = data.message;
+            }
+        } catch {
+            // ignore
+        }
+
+        const error = new Error(message);
+        error.status = response.status;
+        return error;
+    }
+
+    async function refreshAccessToken() {
+        if (!refreshToken) return false;
+
+        try {
+            const response = await fetch(`${apiBase}/token/refresh/access`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ refreshToken })
+            });
+
+            if (!response.ok) return false;
+
+            const data = await response.json();
+            saveTokens(data);
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    async function refreshRefreshToken() {
+        if (!refreshToken) {
+            throw new Error("Нет refresh token");
+        }
+
+        const headers = {
+            "Content-Type": "application/json"
+        };
+
+        if (accessToken) {
+            headers.Authorization = `Bearer ${accessToken}`;
+        }
+
+        const response = await fetch(`${apiBase}/token/refresh/refresh`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ refreshToken })
+        });
+
+        if (!response.ok) {
+            throw await parseApiError(response);
+        }
+
+        const data = await response.json();
+        saveTokens(data);
+        return data;
+    }
+
+    async function apiFetch(path, options = {}) {
+        const method = options.method || "GET";
+        const auth = options.auth !== false;
+        const retry = options.retry !== false;
+
+        const headers = {
+            ...(options.headers || {})
+        };
+
+        if (options.body !== undefined) {
+            headers["Content-Type"] = "application/json";
+        }
+
+        if (auth && accessToken) {
+            headers.Authorization = `Bearer ${accessToken}`;
+        }
+
+        const response = await fetch(apiBase + path, {
+            method,
+            headers,
+            body: options.body === undefined ? undefined : JSON.stringify(options.body)
+        });
+
+        if (
+            response.status === 401 &&
+            auth &&
+            refreshToken &&
+            retry &&
+            !path.startsWith("/token/refresh") &&
+            !path.startsWith("/auth/")
+        ) {
+            const refreshed = await refreshAccessToken();
+
+            if (refreshed) {
+                return apiFetch(path, {
+                    ...options,
+                    retry: false
+                });
+            }
+
+            logout();
+        }
+
+        if (!response.ok) {
+            throw await parseApiError(response);
+        }
+
+        return response;
+    }
+
+    async function loginRequest(login, password) {
+        const response = await apiFetch("/auth/sign-in", {
+            method: "POST",
+            body: { login, password },
+            auth: false
+        });
+
+        const data = await response.json();
+        saveTokens(data);
+    }
+
+    async function registerRequest(login, password) {
+        const response = await apiFetch("/auth/sign-up", {
+            method: "POST",
+            body: { login, password },
+            auth: false
+        });
+
+        return response.text();
+    }
+
+    async function loadMe() {
+        const response = await apiFetch("/user/get-me");
+        currentUser = await response.json();
+        renderProfile();
+    }
+
+    function hideAllScreens() {
+        ["authScreen", "lobbyScreen", "leaderboardScreen", "profileScreen"].forEach((id) => {
+            $(`#${id}`).classList.add("hidden");
+        });
+    }
+
+    function showAuthScreen() {
+        stopListsPolling();
+        closeGameModal();
+
+        hideAllScreens();
+        $("#authScreen").classList.remove("hidden");
+        $("#mainNav").classList.add("hidden");
+    }
+
+    function showAppScreen() {
+        hideAllScreens();
+        $("#mainNav").classList.remove("hidden");
+        switchTab(currentTab || "lobby");
+    }
+
+    function switchTab(tab) {
+        currentTab = tab;
+
+        $$(".tab-btn").forEach((btn) => {
+            btn.classList.toggle("active", btn.dataset.tab === tab);
+        });
+
+        hideAllScreens();
+
+        $(`#${tab}Screen`).classList.remove("hidden");
+
+        if (tab === "lobby") {
+            loadAllLists().catch((error) => showToast(error.message, true));
+        }
+
+        if (tab === "leaderboard") {
+            loadLeaderboard(leaderboardLimit).catch((error) => showToast(error.message, true));
+        }
+
+        if (tab === "profile") {
+            renderProfile();
+        }
+    }
+
+    function logout() {
+        clearAuth();
+        stopListsPolling();
+        closeGameModal();
+        showAuthScreen();
+        showToast("Вы вышли из аккаунта");
+    }
+
+    async function loadInvitations() {
+        const response = await apiFetch("/game/games/not-accepted");
+        const games = await response.json();
+        renderList("#invitationsList", games, "invitation", "Пока нет приглашений");
+    }
+
+    async function loadActiveGames() {
+        const response = await apiFetch("/game/my-games");
+        let games = await response.json();
+
+        games = games.filter((game) => {
+            if (game.state === "Turning player") return true;
+
+            if (game.state === "waiting...") {
+                return game.player1 && game.player1.playerId === currentUser?.id;
+            }
+
+            return false;
+        });
+
+        renderList("#activeGamesList", games, "active", "Пока нет активных игр");
+    }
+
+    async function loadFinishedGames() {
+        const response = await apiFetch("/game/finished");
+        const games = await response.json();
+        renderList("#finishedGamesList", games, "finished", "Пока нет завершённых игр");
+    }
+
+    async function loadAllLists() {
+        if (!accessToken) return;
+
+        await Promise.allSettled([
+            loadInvitations(),
+            loadActiveGames(),
+            loadFinishedGames()
+        ]);
+    }
+
+    function renderList(selector, games, mode, emptyText) {
+        const container = $(selector);
+
+        if (!games || games.length === 0) {
+            container.innerHTML = `<div class="empty">${escapeHtml(emptyText)}</div>`;
+            return;
+        }
+
+        container.innerHTML = games.map((game) => gameCard(game, mode)).join("");
+    }
+
+    function getMyPlayer(game) {
+        if (!currentUser) return null;
+
+        if (game.player1 && game.player1.playerId === currentUser.id) {
+            return game.player1;
+        }
+
+        if (game.player2 && game.player2.playerId === currentUser.id) {
+            return game.player2;
+        }
+
+        return null;
+    }
+
+    function getMySign(game) {
+        const player = getMyPlayer(game);
+        return player ? player.playerSign : "";
+    }
+
+    function gameCard(game, mode) {
+        const mySign = getMySign(game);
+
+        let actions = "";
+
+        if (mode === "invitation") {
+            actions += `<button class="btn-small" onclick="acceptGame('${game.id}')">Принять</button>`;
+        }
+
+        actions += `<button class="btn-small" onclick="openGame('${game.id}')">${mode === "finished" ? "Посмотреть" : "Открыть"}</button>`;
+
+        return `
+            <div class="card">
+                <div><strong>Игра:</strong> ${escapeHtml(shortUuid(game.id))}</div>
+                <div><strong>Состояние:</strong> ${escapeHtml(formatGameState(game))}</div>
+                <div><strong>Создана:</strong> ${escapeHtml(formatDate(game.created_at))}</div>
+                ${mySign ? `<div><strong>Ваш знак:</strong> ${escapeHtml(mySign)}</div>` : ""}
+                <div class="card-actions">${actions}</div>
+            </div>
+        `;
+    }
+
+    async function createAiGame() {
+        try {
+            const response = await apiFetch("/game/create", {
+                method: "POST",
+                body: {
+                    vsAi: true
+                }
+            });
+
+            const game = await response.json();
+
+            await loadAllLists();
+            openGame(game.id);
+        } catch (error) {
+            showToast(error.message, true);
+        }
+    }
+
+    async function invitePlayer() {
+        const player2Login = $("#inviteLoginInput").value.trim();
+
+        if (!player2Login) {
+            showToast("Введите логин второго игрока", true);
+            return;
+        }
+
+        try {
+            const response = await apiFetch("/game/create", {
+                method: "POST",
+                body: {
+                    vsAi: false,
+                    player2Login
+                }
+            });
+
+            const game = await response.json();
+
+            $("#inviteLoginInput").value = "";
+
+            await loadAllLists();
+            showToast("Приглашение отправлено");
+            openGame(game.id);
+        } catch (error) {
+            showToast(error.message, true);
+        }
+    }
+
+    async function acceptGame(gameId) {
+        try {
+            const response = await apiFetch(`/game/${gameId}/accept`, {
+                method: "POST"
+            });
+
+            const game = await response.json();
+
+            await loadAllLists();
+            openGame(game.id);
+        } catch (error) {
+            showToast(error.message, true);
+            await loadAllLists();
+        }
+    }
+
+    async function openGame(gameId) {
+        currentGameId = gameId;
+
+        $("#gameModal").classList.remove("hidden");
+        $("#gameModalError").textContent = "";
+
+        await refreshGameModal();
+        startGamePolling();
+    }
+
+    function closeGameModal() {
+        currentGameId = null;
+        $("#gameModal").classList.add("hidden");
+        stopGamePolling();
+    }
+
+    async function refreshGameModal() {
+        if (!currentGameId) return;
+
+        try {
+            const response = await apiFetch(`/game/${currentGameId}`);
+            const game = await response.json();
+            renderGameModal(game);
+        } catch (error) {
+            $("#gameModalError").textContent = error.message;
+        }
+    }
+
+    function getNextSign(game) {
+        const turnsCount = (game.turns || []).length;
+        return turnsCount % 2 === 0 ? "X" : "O";
+    }
+
+    function getCurrentTurnPlayerId(game) {
+        const sign = getNextSign(game);
+
+        if (game.player1 && game.player1.playerSign === sign) {
+            return game.player1.playerId;
+        }
+
+        if (game.player2 && game.player2.playerSign === sign) {
+            return game.player2.playerId;
+        }
+
+        return null;
+    }
+
+    function renderGameModal(game) {
+        $("#gameModalTitle").textContent = `Игра ${shortUuid(game.id)}`;
+        $("#gameModalState").textContent = formatGameState(game);
+        $("#gameModalError").textContent = "";
+
+        $("#gameModalPlayers").innerHTML = `
+            <div>
+                Игрок 1: ${escapeHtml(game.player1?.playerSign || "?")} —
+                ${escapeHtml(playerDisplayName(game.player1?.playerId))}
+            </div>
+            <div>
+                Игрок 2: ${escapeHtml(game.player2?.playerSign || "?")} —
+                ${escapeHtml(playerDisplayName(game.player2?.playerId))}
+            </div>
+        `;
+
+        renderBoard(game);
+    }
+
+    function renderBoard(game) {
+        const board = $("#gameBoard");
+        board.innerHTML = "";
+
+        const canMove =
+            Boolean(currentUser) &&
+            game.state === "Turning player" &&
+            getCurrentTurnPlayerId(game) === currentUser.id;
+
+        const field = game.field || [];
+
+        field.forEach((row, rowIndex) => {
+            row.forEach((cell, colIndex) => {
+                const button = document.createElement("button");
+
+                button.className = "cell";
+                button.textContent = cell === " " ? "" : cell;
+
+                if (cell === "X") button.classList.add("x");
+                if (cell === "O") button.classList.add("o");
+
+                button.disabled = !canMove || cell !== " ";
+
+                button.addEventListener("click", () => {
+                    makeMove(rowIndex + 1, colIndex + 1);
+                });
+
+                board.appendChild(button);
+            });
+        });
+    }
+
+    async function makeMove(row, col) {
+        if (!currentGameId) return;
+
+        try {
+            const response = await apiFetch(`/game/${currentGameId}/move`, {
+                method: "POST",
+                body: { row, col }
+            });
+
+            const game = await response.json();
+
+            renderGameModal(game);
+            await loadAllLists();
+        } catch (error) {
+            $("#gameModalError").textContent = error.message;
+            showToast(error.message, true);
+            await refreshGameModal();
+        }
+    }
+
+    function startGamePolling() {
+        stopGamePolling();
+
+        gamePollTimer = setInterval(() => {
+            if (currentGameId) {
+                refreshGameModal();
+            }
+        }, 4000);
+    }
+
+    function stopGamePolling() {
+        if (gamePollTimer) {
+            clearInterval(gamePollTimer);
+            gamePollTimer = null;
+        }
+    }
+
+    function startListsPolling() {
+        stopListsPolling();
+
+        listsPollTimer = setInterval(() => {
+            if (accessToken && currentTab === "lobby") {
+                loadAllLists();
+            }
+        }, 15000);
+    }
+
+    function stopListsPolling() {
+        if (listsPollTimer) {
+            clearInterval(listsPollTimer);
+            listsPollTimer = null;
+        }
+    }
+
+    async function loadLeaderboard(limit = leaderboardLimit) {
+        leaderboardLimit = limit;
+
+        $$(".top-buttons button[data-limit]").forEach((btn) => {
+            btn.classList.toggle("active", Number(btn.dataset.limit) === limit);
+        });
+
+        try {
+            let response;
+
+            try {
+                response = await apiFetch(`/leaderboard?limit=${encodeURIComponent(limit)}`);
+            } catch (error) {
+                if (error.status === 404) {
+                    response = await apiFetch(`/leaderboard/?limit=${encodeURIComponent(limit)}`);
+                } else {
+                    throw error;
+                }
+            }
+
+            const data = await response.json();
+            renderLeaderboard(data);
+        } catch (error) {
+            $("#leaderboardBody").innerHTML = `
+                <tr>
+                    <td colspan="4">${escapeHtml(error.message)}</td>
+                </tr>
+            `;
+        }
+    }
+
+    function renderLeaderboard(items) {
+        const body = $("#leaderboardBody");
+
+        if (!items || items.length === 0) {
+            body.innerHTML = `
+                <tr>
+                    <td colspan="4">Нет данных</td>
+                </tr>
+            `;
+            return;
+        }
+
+        body.innerHTML = items.map((item, index) => {
+            const playerName = item.login || item.playerId || "Unknown";
+
+            return `
+                <tr>
+                    <td>${index + 1}</td>
+                    <td>${escapeHtml(playerName)}</td>
+                    <td>${item.winsCnt ?? 0}</td>
+                    <td>${Number(item.winsRatio ?? 0).toFixed(2)}</td>
+                </tr>
+            `;
+        }).join("");
+    }
+
+    function renderProfile() {
+        const container = $("#profileInfo");
+
+        if (!currentUser) {
+            container.innerHTML = "<div>Нет данных пользователя</div>";
+            return;
+        }
+
+        container.innerHTML = `
+            <div><strong>Логин:</strong> ${escapeHtml(currentUser.login)}</div>
+            <div><strong>ID:</strong> ${escapeHtml(currentUser.id)}</div>
+            <div><strong>Роли:</strong> ${escapeHtml((currentUser.roles || []).join(", "))}</div>
+        `;
+    }
+
+    async function refreshProfile() {
+        try {
+            await loadMe();
+            showToast("Профиль обновлён");
+        } catch (error) {
+            showToast(error.message, true);
+
+            if (error.status === 401) {
+                logout();
+            }
+        }
+    }
+
+    function toggleAuthForms(showLogin) {
+        $("#loginForm").classList.toggle("hidden", !showLogin);
+        $("#registerForm").classList.toggle("hidden", showLogin);
+
+        $("#showLogin").classList.toggle("active", showLogin);
+        $("#showRegister").classList.toggle("active", !showLogin);
+    }
+
+    function bindEvents() {
+        $("#showLogin").addEventListener("click", () => toggleAuthForms(true));
+        $("#showRegister").addEventListener("click", () => toggleAuthForms(false));
+
+        $("#loginForm").addEventListener("submit", async (event) => {
+            event.preventDefault();
+
+            const login = $("#loginLogin").value.trim();
+            const password = $("#loginPassword").value;
+
+            try {
+                await loginRequest(login, password);
+                await loadMe();
+
+                showAppScreen();
+                await loadAllLists();
+                startListsPolling();
+
+                showToast("Вход выполнен");
+            } catch (error) {
+                showToast(error.message, true);
+            }
+        });
+
+        $("#registerForm").addEventListener("submit", async (event) => {
+            event.preventDefault();
+
+            const login = $("#regLogin").value.trim();
+            const password = $("#regPassword").value;
+
+            try {
+                await registerRequest(login, password);
+                await loginRequest(login, password);
+                await loadMe();
+
+                showAppScreen();
+                await loadAllLists();
+                startListsPolling();
+
+                showToast("Регистрация и вход выполнены");
+            } catch (error) {
+                showToast(error.message, true);
+            }
+        });
+
+        $("#saveApiBtn").addEventListener("click", () => {
+            const url = $("#apiUrlInput").value.trim().replace(/\/+$/, "");
+
+            apiBase = url || DEFAULT_API_URL;
+            localStorage.setItem("apiUrl", apiBase);
+
+            showToast("Адрес API сохранён");
+
+            if (accessToken) {
+                loadAllLists();
+            }
+        });
+
+        $("#logoutBtn").addEventListener("click", logout);
+
+        $$(".tab-btn").forEach((btn) => {
+            btn.addEventListener("click", () => {
+                switchTab(btn.dataset.tab);
+            });
+        });
+
+        $("#createAiBtn").addEventListener("click", createAiGame);
+        $("#invitePlayerBtn").addEventListener("click", invitePlayer);
+
+        $("#refreshInvitationsBtn").addEventListener("click", () => {
+            loadInvitations().catch((error) => showToast(error.message, true));
+        });
+
+        $("#refreshActiveBtn").addEventListener("click", () => {
+            loadActiveGames().catch((error) => showToast(error.message, true));
+        });
+
+        $("#refreshFinishedBtn").addEventListener("click", () => {
+            loadFinishedGames().catch((error) => showToast(error.message, true));
+        });
+
+        $$("[data-limit]").forEach((btn) => {
+            btn.addEventListener("click", () => {
+                loadLeaderboard(Number(btn.dataset.limit));
+            });
+        });
+
+        $("#refreshLeaderboardBtn").addEventListener("click", () => {
+            loadLeaderboard(leaderboardLimit);
+        });
+
+        $("#refreshProfileBtn").addEventListener("click", refreshProfile);
+
+        $("#rotateRefreshBtn").addEventListener("click", async () => {
+            try {
+                await refreshRefreshToken();
+                showToast("Refresh token обновлён");
+            } catch (error) {
+                showToast(error.message, true);
+            }
+        });
+
+        $("#closeGameModalBtn").addEventListener("click", closeGameModal);
+
+        $("#gameModal").addEventListener("click", (event) => {
+            if (event.target === $("#gameModal")) {
+                closeGameModal();
+            }
+        });
+    }
+
+    window.addEventListener("DOMContentLoaded", async () => {
+        $("#apiUrlInput").value = apiBase;
+
+        bindEvents();
+
+        setInterval(async () => {
+            if (accessToken && refreshToken) {
+                const ok = await refreshAccessToken();
+
+                if (!ok) {
+                    logout();
+                }
+            }
+        }, 13 * 60 * 1000);
+
+        if (accessToken) {
+            try {
+                await loadMe();
+
+                showAppScreen();
+                await loadAllLists();
+                startListsPolling();
+            } catch {
+                logout();
+            }
+        } else {
+            showAuthScreen();
+        }
+    });
+</script>
+</body>
+</html>

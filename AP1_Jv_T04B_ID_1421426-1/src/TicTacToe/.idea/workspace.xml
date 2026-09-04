@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="f28dd32c-b8b9-49a2-8fa3-48dc85db8b47" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/src/main/java/tictactoe/datasource/mapper/UserMapper.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/main/java/tictactoe/domain/model/AuthFilter.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/main/java/tictactoe/domain/model/User.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/main/java/tictactoe/domain/service/AuthService.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/main/java/tictactoe/domain/service/UserService.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/main/java/tictactoe/web/mapper/UserRequestMapper.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/main/java/tictactoe/web/model/SignUpRequest.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/build.gradle.kts" beforeDir="false" afterPath="$PROJECT_DIR$/build.gradle.kts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/tictactoe/datasource/model/TurnEntity.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/tictactoe/datasource/model/TurnEntity.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/tictactoe/datasource/service/RepositoryService.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/tictactoe/datasource/service/GameRepositoryService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/tictactoe/di/SpringConfiguration.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/tictactoe/di/SpringConfiguration.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/tictactoe/domain/model/Game.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/tictactoe/domain/model/Game.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/tictactoe/domain/service/GameService.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/tictactoe/domain/service/GameService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/tictactoe/web/controller/GameController.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/tictactoe/web/controller/GameController.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/tictactoe/web/mapper/WebDTOMapper.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/tictactoe/web/mapper/WebDTOMapper.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/tictactoe/web/model/WebDTO.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/tictactoe/web/model/WebDTO.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../code.txt" beforeDir="false" afterPath="$PROJECT_DIR$/../code.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../index.html" beforeDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="ExternalProjectsData">
+    <projectState path="$PROJECT_DIR$">
+      <ProjectState />
+    </projectState>
+  </component>
+  <component name="ExternalProjectsManager">
+    <system id="GRADLE">
+      <state>
+        <task path="$PROJECT_DIR$">
+          <activation />
+        </task>
+        <projects_view>
+          <tree_state>
+            <expand>
+              <path>
+                <item name="" type="6a2764b6:ExternalProjectsStructure$RootNode" />
+                <item name="TicTacToe" type="f1a62948:ProjectNode" />
+              </path>
+            </expand>
+            <select />
+          </tree_state>
+        </projects_view>
+      </state>
+    </system>
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Enum" />
+        <option value="AnnotationType" />
+        <option value="Interface" />
+        <option value="Class" />
+      </list>
+    </option>
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/../.." />
+  </component>
+  <component name="GradleScriptDefinitionsStorage" workingDir="$PROJECT_DIR$" gradleHome="$USER_HOME$/.gradle/wrapper/dists/gradle-8.14-bin/38aieal9i53h9rfe7vjup95b9/gradle-8.14" javaHome="$USER_HOME$/.jdks/temurin-21.0.11" gradleVersion="8.14" />
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 1
+}</component>
+  <component name="ProjectId" id="3FtZneJQT9YDGsjaCD65nAKMUnp" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;Application.Application.executor&quot;: &quot;Run&quot;,
+    &quot;Gradle.Download Sources.executor&quot;: &quot;Run&quot;,
+    &quot;Gradle.TicTacToe [:Application.main()].executor&quot;: &quot;Run&quot;,
+    &quot;Gradle.TicTacToe [:tictactoe.Application.main()].executor&quot;: &quot;Run&quot;,
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;develop&quot;,
+    &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
+    &quot;last_opened_file_path&quot;: &quot;/home/alfredip/Desktop/Java/AP1_Jv_T04B_ID_1421426-1/src/TicTacToe&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;reference.projectsettings.compiler.annotationProcessors&quot;,
+    &quot;settings.editor.splitter.proportion&quot;: &quot;0.26337034&quot;
+  }
+}</component>
+  <component name="RunManager">
+    <configuration name="Application" type="Application" factoryName="Application" temporary="true" nameIsGenerated="true">
+      <option name="MAIN_CLASS_NAME" value="tictactoe.Application" />
+      <module name="TicTacToe.main" />
+      <extension name="coverage">
+        <pattern>
+          <option name="PATTERN" value="tictactoe.*" />
+          <option name="ENABLED" value="true" />
+        </pattern>
+      </extension>
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+    <recent_temporary>
+      <list>
+        <item itemvalue="Application.Application" />
+      </list>
+    </recent_temporary>
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="f28dd32c-b8b9-49a2-8fa3-48dc85db8b47" name="Changes" comment="" />
+      <created>1782896496183</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1782896496183</updated>
+    </task>
+    <servers />
+  </component>
+</project>

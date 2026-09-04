@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Крестики-Нолики Онлайн</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.8/index.css">
+    <style>
+        * { font-family: 'Inter', sans-serif; }
+        :root {
+            --bg-primary: #0f0f23;
+            --bg-secondary: #1a1a3e;
+            --accent: #6c63ff;
+            --x-color: #ff6b6b;
+            --o-color: #4ecdc4;
+            --text-primary: #e8e8ff;
+            --text-secondary: #9d9dcc;
+        }
+        body { background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; }
+        .bg-gradient { background: linear-gradient(135deg, #0f0f23 0%, #1a1a3e 50%, #0f0f23 100%); }
+        .glass-card {
+            background: rgba(30, 30, 74, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(108, 99, 255, 0.2);
+            border-radius: 16px;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #6c63ff, #5a52d5);
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(108, 99, 255, 0.3);
+        }
+        .btn-primary:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(108, 99, 255, 0.5); }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-secondary {
+            background: rgba(108, 99, 255, 0.15);
+            border: 1px solid rgba(108, 99, 255, 0.4);
+            transition: all 0.3s ease;
+        }
+        .btn-secondary:hover { background: rgba(108, 99, 255, 0.3); transform: translateY(-1px); }
+        .btn-danger {
+            background: rgba(255, 107, 107, 0.15);
+            border: 1px solid rgba(255, 107, 107, 0.4);
+            transition: all 0.3s ease;
+        }
+        .btn-danger:hover { background: rgba(255, 107, 107, 0.3); }
+        .cell {
+            width: 100px; height: 100px;
+            background: rgba(30, 30, 74, 0.8);
+            border: 2px solid rgba(108, 99, 255, 0.3);
+            border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 2.5rem; font-weight: 700;
+            cursor: pointer; transition: all 0.2s ease; user-select: none;
+        }
+        .cell:hover:not(.cell-disabled) {
+            background: rgba(108, 99, 255, 0.2);
+            border-color: rgba(108, 99, 255, 0.6);
+            transform: scale(1.05);
+        }
+        .cell-disabled { cursor: not-allowed; }
+        .cell-x { color: var(--x-color); text-shadow: 0 0 20px rgba(255, 107, 107, 0.5); }
+        .cell-o { color: var(--o-color); text-shadow: 0 0 20px rgba(78, 205, 196, 0.5); }
+        .cell-win {
+            animation: winPulse 0.6s ease-in-out infinite alternate;
+            border-color: #ffd700 !important;
+            box-shadow: 0 0 20px rgba(255, 215, 0, 0.4);
+        }
+        @keyframes winPulse { from { transform: scale(1); } to { transform: scale(1.08); } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fadeIn { animation: fadeIn 0.5s ease forwards; }
+        .game-board {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+            padding: 16px; background: rgba(15, 15, 35, 0.5);
+            border-radius: 16px; border: 1px solid rgba(108, 99, 255, 0.2);
+        }
+        .input-field {
+            background: rgba(15, 15, 35, 0.6);
+            border: 1px solid rgba(108, 99, 255, 0.3);
+            border-radius: 10px; padding: 12px 16px;
+            color: var(--text-primary); transition: all 0.3s ease;
+            width: 100%; box-sizing: border-box;
+        }
+        .input-field:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(108, 99, 255, 0.2); }
+        .input-field::placeholder { color: var(--text-secondary); }
+        .nav-link { transition: all 0.3s ease; position: relative; }
+        .nav-link::after {
+            content: ''; position: absolute; bottom: -4px; left: 0;
+            width: 0; height: 2px; background: var(--accent); transition: width 0.3s ease;
+        }
+        .nav-link:hover::after, .nav-link.active::after { width: 100%; }
+        .game-card { transition: all 0.3s ease; }
+        .game-card:hover { transform: translateY(-4px); box-shadow: 0 8px 25px rgba(108, 99, 255, 0.2); }
+        .status-badge { padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; white-space: nowrap; }
+        .badge-waiting { background: rgba(255, 193, 7, 0.2); color: #ffc107; }
+        .badge-playing { background: rgba(78, 205, 196, 0.2); color: #4ecdc4; }
+        .badge-won { background: rgba(108, 99, 255, 0.2); color: #6c63ff; }
+        .badge-draw { background: rgba(157, 157, 204, 0.2); color: #9d9dcc; }
+        .badge-lost { background: rgba(255, 107, 107, 0.2); color: #ff6b6b; }
+        .toast {
+            position: fixed; top: 20px; right: 20px;
+            padding: 16px 24px; border-radius: 12px; z-index: 9999;
+            animation: slideInRight 0.4s ease; max-width: 400px; word-break: break-word;
+        }
+        @keyframes slideInRight { from { opacity: 0; transform: translateX(100px); } to { opacity: 1; transform: translateX(0); } }
+        .toast-success { background: rgba(78, 205, 196, 0.95); color: #fff; }
+        .toast-error { background: rgba(255, 107, 107, 0.95); color: #fff; }
+        .toast-info { background: rgba(108, 99, 255, 0.95); color: #fff; }
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center;
+            z-index: 1000; animation: fadeIn 0.3s ease;
+        }
+        .mini-board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; width: 90px; height: 90px; }
+        .mini-cell { background: rgba(30, 30, 74, 0.6); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; }
+        .turn-indicator { animation: pulse 2s ease-in-out infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+        .loading-spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid rgba(255,255,255,0.3); border-radius: 50%; border-top-color: #fff; animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @media (max-width: 640px) {
+            .cell { width: 80px; height: 80px; font-size: 2rem; }
+            .nav-desktop { display: none !important; }
+            .nav-mobile { display: flex !important; }
+        }
+        @media (min-width: 641px) { .nav-mobile { display: none !important; } }
+    </style>
+</head>
+<body class="bg-gradient">
+<div id="app"></div>
+<script>
+    const API_BASE = 'http://localhost:8080';
+
+    let state = {
+        currentPage: 'login',
+        user: null,
+        games: [],
+        currentGame: null,
+        notAcceptedGames: [],
+        allGames: [],
+        loading: false,
+        modal: null,
+        pollTimer: null,
+        // gameMeta[gameId] = { sign: 'X'|'O', isAi: bool, isPlayer1: bool }
+        gameMeta: {},
+    };
+
+    // ==================== API ====================
+    function getAuthHeader() {
+        if (!state.user) return null;
+        return `Basic ${btoa(`${state.user.login}:${state.user.password}`)}`;
+    }
+
+    async function apiRequest(method, path, body = null, needsAuth = true) {
+        const headers = { 'Content-Type': 'application/json' };
+        if (needsAuth) headers['Authorization'] = getAuthHeader();
+        const config = { method, headers };
+        if (body && (method === 'POST' || method === 'PUT')) config.body = JSON.stringify(body);
+        const response = await fetch(`${API_BASE}${path}`, config);
+        if (response.status === 401 && needsAuth) {
+            signOut();
+            throw new Error('Сессия истекла. Войдите снова.');
+        }
+        if (!response.ok) {
+            const errorText = await response.text();
+            let errorMsg;
+            try { const j = JSON.parse(errorText); errorMsg = j.message || errorText; }
+            catch { errorMsg = errorText || `Ошибка ${response.status}`; }
+            throw new Error(errorMsg);
+        }
+        const text = await response.text();
+        if (!text) return null;
+        try { return JSON.parse(text); } catch { return text; }
+    }
+
+    // ==================== AUTH ====================
+    async function signUp(login, password) {
+        state.loading = true; render();
+        try {
+            await apiRequest('POST', '/auth/signup', { login, password }, false);
+            showToast('Регистрация успешна! Теперь войдите.', 'success');
+            state.loading = false; state.currentPage = 'login'; render();
+        } catch (e) {
+            state.loading = false;
+            showToast(e.message || 'Ошибка регистрации', 'error'); render();
+        }
+    }
+
+    async function signIn(login, password) {
+        state.loading = true; render();
+        try {
+            const authHeader = `Basic ${btoa(`${login}:${password}`)}`;
+            const response = await fetch(`${API_BASE}/auth/login`, {
+                method: 'POST',
+                headers: { 'Authorization': authHeader, 'Content-Type': 'application/json' }
+            });
+            if (!response.ok) throw new Error('Неверный логин или пароль');
+            const userIdText = await response.text();
+            const userId = userIdText.replace(/"/g, '').trim();
+            state.user = { login, password, userId };
+            loadGameMeta();
+            localStorage.setItem('ttt_user', JSON.stringify(state.user));
+            state.currentPage = 'dashboard'; state.loading = false;
+            showToast(`Добро пожаловать, ${login}!`, 'success');
+            await loadDashboard();
+        } catch (e) {
+            state.loading = false;
+            showToast(e.message || 'Ошибка входа', 'error'); render();
+        }
+    }
+
+    function signOut() {
+        stopPolling();
+        state.user = null; state.games = []; state.currentGame = null;
+        state.notAcceptedGames = []; state.allGames = []; state.modal = null;
+        localStorage.removeItem('ttt_user');
+        state.currentPage = 'login'; render();
+    }
+
+    // ==================== GAME META (sign + isAi) ====================
+    function loadGameMeta() {
+        const saved = localStorage.getItem('ttt_meta');
+        if (saved) { try { state.gameMeta = JSON.parse(saved); } catch { state.gameMeta = {}; } }
+        else state.gameMeta = {};
+    }
+
+    function saveGameMeta() {
+        localStorage.setItem('ttt_meta', JSON.stringify(state.gameMeta));
+    }
+
+    function setGameMeta(gameId, sign, isAi, isPlayer1) {
+        state.gameMeta[gameId] = { sign, isAi, isPlayer1 };
+        saveGameMeta();
+    }
+
+    function getMeta(gameId) {
+        return state.gameMeta[gameId] || null;
+    }
+
+    // ==================== GAME ACTIONS ====================
+    async function loadDashboard() {
+        try {
+            const [myGames, notAccepted] = await Promise.all([
+                apiRequest('GET', '/game/my-games'),
+                apiRequest('GET', '/game/games/not-accepted'),
+            ]);
+            state.games = myGames || [];
+            state.notAcceptedGames = notAccepted || [];
+
+            // Determine meta for games without it
+            const notAcceptedIds = new Set((notAccepted || []).map(g => g.id));
+            for (const game of state.games) {
+                if (!getMeta(game.id)) {
+                    inferGameMeta(game, notAcceptedIds);
+                }
+            }
+            render();
+        } catch (e) {
+            if (e.message.includes('Сессия')) return;
+            showToast('Ошибка загрузки: ' + e.message, 'error');
+        }
+    }
+
+    // Infer meta when we don't have it stored (e.g. after localStorage clear)
+    function inferGameMeta(game, notAcceptedIds) {
+        if (!game) return;
+        const isNotAccepted = notAcceptedIds && notAcceptedIds.has(game.id);
+        const stateStr = (game.state || '').toLowerCase();
+        const isWaiting = stateStr.includes('waiting');
+
+        // If game is in not-accepted list → we are player2
+        if (isNotAccepted) {
+            setGameMeta(game.id, game.player2?.playerSign || 'O', false, false);
+            return;
+        }
+
+        // If state is WAITING → we created it → we are player1
+        if (isWaiting) {
+            setGameMeta(game.id, game.player1?.playerSign || 'X', false, true);
+            return;
+        }
+
+        // For active/finished games not in not-accepted:
+        // We need to figure out if we're player1 or player2.
+        // Heuristic: check if any turn was made by "us" — but we don't have playerId in response.
+        // Best effort: assume player1 (creator) by default.
+        // The user can manually set via the game screen if wrong.
+        setGameMeta(game.id, game.player1?.playerSign || 'X', false, true);
+    }
+
+    async function createGame(vsAi, player2Login = '') {
+        try {
+            const body = vsAi ? { vsAi: true } : { vsAi: false, player2Login };
+            const game = await apiRequest('POST', '/game/create', body);
+            if (game && game.id) {
+                // We are always player1 when creating
+                setGameMeta(game.id, game.player1?.playerSign || 'X', vsAi, true);
+            }
+            state.currentGame = game;
+            state.currentPage = 'game';
+            showToast('Игра создана!', 'success');
+            if (vsAi) startPolling();
+            render();
+        } catch (e) { showToast(e.message, 'error'); }
+    }
+
+    async function acceptGame(gameId) {
+        try {
+            const game = await apiRequest('POST', `/game/${gameId}/accept`);
+            if (game && game.id) {
+                // We are always player2 when accepting
+                setGameMeta(game.id, game.player2?.playerSign || 'O', false, false);
+            }
+            state.currentGame = game;
+            state.currentPage = 'game';
+            showToast('Игра принята!', 'success');
+            render();
+        } catch (e) { showToast(e.message, 'error'); }
+    }
+
+    async function makeMove(gameId, row, col) {
+        try {
+            const game = await apiRequest('POST', `/game/${gameId}/move`, { row, col });
+            state.currentGame = game;
+            render();
+            if (isGameFinished(game)) {
+                stopPolling();
+                setTimeout(() => showGameResult(game), 500);
+            }
+        } catch (e) { showToast(e.message, 'error'); }
+    }
+
+    async function loadGame(gameId) {
+        try {
+            const game = await apiRequest('GET', `/game/${gameId}`);
+            state.currentGame = game;
+            state.currentPage = 'game';
+
+            // Ensure meta exists
+            if (!getMeta(gameId)) {
+                // Try to infer from dashboard data
+                const notAcceptedIds = new Set((state.notAcceptedGames || []).map(g => g.id));
+                inferGameMeta(game, notAcceptedIds);
+            }
+
+            const meta = getMeta(gameId);
+            const hasAi = meta?.isAi || false;
+            if (!isGameFinished(game) && hasAi) startPolling();
+            else stopPolling();
+
+            render();
+        } catch (e) { showToast('Ошибка загрузки игры: ' + e.message, 'error'); }
+    }
+
+    async function loadAllGames() {
+        try {
+            const games = await apiRequest('GET', '/game/all');
+            state.allGames = games || [];
+            // Infer meta for all games
+            const notAcceptedIds = new Set((state.notAcceptedGames || []).map(g => g.id));
+            for (const game of state.allGames) {
+                if (!getMeta(game.id)) inferGameMeta(game, notAcceptedIds);
+            }
+            state.currentPage = 'all-games';
+            render();
+        } catch (e) { showToast('Ошибка: ' + e.message, 'error'); }
+    }
+
+    async function refreshCurrentGame() {
+        if (!state.currentGame?.id) return;
+        try {
+            const game = await apiRequest('GET', `/game/${state.currentGame.id}`);
+            state.currentGame = game;
+            if (isGameFinished(game)) { stopPolling(); showGameResult(game); }
+            render();
+        } catch (e) { /* silent */ }
+    }
+
+    // ==================== POLLING ====================
+    function startPolling() {
+        stopPolling();
+        state.pollTimer = setInterval(() => {
+            if (state.currentPage === 'game' && state.currentGame && !isGameFinished(state.currentGame))
+                refreshCurrentGame();
+        }, 2000);
+    }
+    function stopPolling() {
+        if (state.pollTimer) { clearInterval(state.pollTimer); state.pollTimer = null; }
+    }
+
+    // ==================== GAME LOGIC HELPERS ====================
+    function getMySign(game) {
+        if (!game) return null;
+        const meta = getMeta(game.id);
+        return meta?.sign || null;
+    }
+
+    function isMyTurn(game) {
+        if (!state.user || !game) return false;
+        const mySign = getMySign(game);
+        if (!mySign) return false;
+        if (isGameFinished(game)) return false;
+        // X always goes first, signs alternate: X, O, X, O...
+        // After even number of turns → X's turn; after odd → O's turn
+        const turnsCount = game.turns?.length || 0;
+        const currentTurnSign = (turnsCount % 2 === 0) ? 'X' : 'O';
+        return mySign === currentTurnSign;
+    }
+
+    function isGameFinished(game) {
+        if (!game?.state) return false;
+        const s = game.state.toLowerCase();
+        return s.includes('draw') || s.includes('won') || s.includes('ai won');
+    }
+
+    function isAiGame(game) {
+        if (!game) return false;
+        const meta = getMeta(game.id);
+        return meta?.isAi || false;
+    }
+
+    function getGameStateInfo(game) {
+        if (!game?.state) return { text: 'Неизвестно', class: 'badge-playing' };
+        const s = game.state.toLowerCase();
+        if (s.includes('waiting')) return { text: 'Ожидание', class: 'badge-waiting' };
+        if (s.includes('draw')) return { text: 'Ничья', class: 'badge-draw' };
+        if (s.includes('ai won')) {
+            const meta = getMeta(game.id);
+            if (meta?.isAi) return { text: 'ИИ победил', class: 'badge-lost' };
+            return { text: 'ИИ победил', class: 'badge-won' };
+        }
+        if (s.includes('won player')) {
+            const winnerMatch = s.match(/uuid:\s*([a-f0-9-]+)/);
+            if (winnerMatch && state.user) {
+                const winnerId = winnerMatch[1];
+                if (winnerId === state.user.userId) return { text: 'Победа!', class: 'badge-won' };
+                else return { text: 'Поражение', class: 'badge-lost' };
+            }
+            return { text: 'Кто-то победил', class: 'badge-won' };
+        }
+        if (s.includes('turning') || s === 'player_turn') return { text: 'Идёт игра', class: 'badge-playing' };
+        return { text: game.state, class: 'badge-playing' };
+    }
+
+    function getWinningCells(game) {
+        if (!game?.field || !isGameFinished(game)) return [];
+        const field = game.field;
+        const lines = [];
+        for (let i = 0; i < 3; i++) {
+            lines.push([[i,0],[i,1],[i,2]]);
+            lines.push([[0,i],[1,i],[2,i]]);
+        }
+        lines.push([[0,0],[1,1],[2,2]]);
+        lines.push([[0,2],[1,1],[2,0]]);
+        for (const line of lines) {
+            const vals = line.map(([r,c]) => field[r][c]);
+            if (vals[0] !== ' ' && vals[0] === vals[1] && vals[1] === vals[2]) return line;
+        }
+        return [];
+    }
+
+    function showGameResult(game) {
+        const info = getGameStateInfo(game);
+        state.modal = { type: 'game-result', title: info.text, message: game.state };
+        render();
+    }
+
+    function showToast(message, type = 'info') {
+        const existing = document.querySelectorAll('.toast');
+        existing.forEach((t, i) => { if (i < existing.length - 2) t.remove(); });
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        setTimeout(() => {
+            toast.style.opacity = '0'; toast.style.transition = 'opacity 0.3s';
+            setTimeout(() => toast.remove(), 300);
+        }, 3500);
+    }
+
+    // ==================== RENDER ====================
+    function render() {
+        const app = document.getElementById('app');
+        app.innerHTML = renderPage();
+        if (state.modal) app.innerHTML += renderModal();
+    }
+
+    function renderPage() {
+        switch (state.currentPage) {
+            case 'login': return renderLogin();
+            case 'signup': return renderSignup();
+            case 'dashboard': return renderDashboard();
+            case 'game': return renderGame();
+            case 'all-games': return renderAllGames();
+            case 'profile': return renderProfile();
+            default: return renderLogin();
+        }
+    }
+
+    function renderNavbar() {
+        if (!state.user) return '';
+        return `
+            <nav class="glass-card mx-4 mt-4 mb-6 px-6 py-4 flex items-center justify-between">
+                <div class="flex items-center gap-3 cursor-pointer" onclick="navigate('dashboard')">
+                    <span class="text-2xl">✕◯</span>
+                    <span class="text-xl font-bold bg-gradient-to-r from-purple-400 to-cyan-400 bg-clip-text text-transparent nav-desktop">Крестики-Нолики</span>
+                </div>
+                <div class="flex items-center gap-6 nav-desktop">
+                    <a onclick="navigate('dashboard')" class="nav-link cursor-pointer ${state.currentPage === 'dashboard' ? 'active text-purple-400' : 'text-gray-300 hover:text-white'}">🎮 Мои игры</a>
+                    <a onclick="navigate('all-games')" class="nav-link cursor-pointer ${state.currentPage === 'all-games' ? 'active text-purple-400' : 'text-gray-300 hover:text-white'}">🌐 Все игры</a>
+                    <a onclick="navigate('profile')" class="nav-link cursor-pointer ${state.currentPage === 'profile' ? 'active text-purple-400' : 'text-gray-300 hover:text-white'}">👤 Профиль</a>
+                    <div class="flex items-center gap-3 ml-4 pl-4 border-l border-purple-500/20">
+                        <span class="text-sm text-gray-400">${state.user.login}</span>
+                        <button onclick="signOut()" class="btn-secondary px-3 py-1.5 rounded-lg text-sm">Выйти</button>
+                    </div>
+                </div>
+                <div class="nav-mobile items-center gap-2" style="display:none;">
+                    <button onclick="navigate('dashboard')" class="text-xl ${state.currentPage === 'dashboard' ? 'opacity-100' : 'opacity-50'}">🎮</button>
+                    <button onclick="navigate('all-games')" class="text-xl ${state.currentPage === 'all-games' ? 'opacity-100' : 'opacity-50'}">🌐</button>
+                    <button onclick="navigate('profile')" class="text-xl ${state.currentPage === 'profile' ? 'opacity-100' : 'opacity-50'}">👤</button>
+                    <button onclick="signOut()" class="text-sm text-gray-400 ml-2">🚪</button>
+                </div>
+            </nav>`;
+    }
+
+    function renderLogin() {
+        return `
+            <div class="min-h-screen flex items-center justify-center p-4">
+                <div class="glass-card p-8 w-full max-w-md animate-fadeIn">
+                    <div class="text-center mb-8">
+                        <div class="text-6xl mb-4">✕◯</div>
+                        <h1 class="text-3xl font-bold bg-gradient-to-r from-purple-400 to-cyan-400 bg-clip-text text-transparent">Крестики-Нолики</h1>
+                        <p class="text-gray-400 mt-2">Войдите в свой аккаунт</p>
+                    </div>
+                    <form onsubmit="handleLogin(event)" class="space-y-4">
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-1">Логин</label>
+                            <input type="text" id="login-input" class="input-field" placeholder="Введите логин" required autocomplete="username">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-1">Пароль</label>
+                            <input type="password" id="password-input" class="input-field" placeholder="Введите пароль" required autocomplete="current-password">
+                        </div>
+                        <button type="submit" class="btn-primary w-full py-3 rounded-xl text-white font-semibold" ${state.loading ? 'disabled' : ''}>
+                            ${state.loading ? '<span class="loading-spinner mr-2"></span> Вход...' : '🚀 Войти'}
+                        </button>
+                    </form>
+                    <p class="text-center text-gray-400 mt-6">Нет аккаунта? <a onclick="navigate('signup')" class="text-purple-400 hover:text-purple-300 cursor-pointer font-semibold">Зарегистрироваться</a></p>
+                </div>
+            </div>`;
+    }
+
+    function renderSignup() {
+        return `
+            <div class="min-h-screen flex items-center justify-center p-4">
+                <div class="glass-card p-8 w-full max-w-md animate-fadeIn">
+                    <div class="text-center mb-8">
+                        <div class="text-6xl mb-4">✕◯</div>
+                        <h1 class="text-3xl font-bold bg-gradient-to-r from-purple-400 to-cyan-400 bg-clip-text text-transparent">Регистрация</h1>
+                        <p class="text-gray-400 mt-2">Создайте новый аккаунт</p>
+                    </div>
+                    <form onsubmit="handleSignup(event)" class="space-y-4">
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-1">Логин (2-32 символа, без пробелов)</label>
+                            <input type="text" id="signup-login" class="input-field" placeholder="Придумайте логин" required minlength="2" maxlength="32" pattern="\\S+">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-1">Пароль (8-64 символа, без пробелов)</label>
+                            <input type="password" id="signup-password" class="input-field" placeholder="Придумайте пароль" required minlength="8" maxlength="64" pattern="\\S+">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-1">Подтвердите пароль</label>
+                            <input type="password" id="signup-confirm" class="input-field" placeholder="Повторите пароль" required>
+                        </div>
+                        <button type="submit" class="btn-primary w-full py-3 rounded-xl text-white font-semibold" ${state.loading ? 'disabled' : ''}>
+                            ${state.loading ? '<span class="loading-spinner mr-2"></span> Регистрация...' : '✨ Создать аккаунт'}
+                        </button>
+                    </form>
+                    <p class="text-center text-gray-400 mt-6">Уже есть аккаунт? <a onclick="navigate('login')" class="text-purple-400 hover:text-purple-300 cursor-pointer font-semibold">Войти</a></p>
+                </div>
+            </div>`;
+    }
+
+    function renderDashboard() {
+        const pendingGames = state.notAcceptedGames || [];
+        const activeGames = (state.games || []).filter(g => !isGameFinished(g));
+        const finishedGames = (state.games || []).filter(g => isGameFinished(g));
+        return `
+            ${renderNavbar()}
+            <div class="max-w-6xl mx-auto px-4 pb-8 animate-fadeIn">
+                <div class="glass-card p-6 mb-6">
+                    <h2 class="text-xl font-bold mb-4 text-purple-300">🎮 Создать новую игру</h2>
+                    <div class="flex flex-wrap gap-4">
+                        <button onclick="createGame(true)" class="btn-primary px-6 py-3 rounded-xl text-white font-semibold">🤖 Играть с ИИ</button>
+                        <button onclick="showCreateWithPlayerModal()" class="btn-secondary px-6 py-3 rounded-xl font-semibold">👥 Играть с другом</button>
+                    </div>
+                </div>
+                ${pendingGames.length > 0 ? `
+                <div class="glass-card p-6 mb-6" style="border-color: rgba(255, 193, 7, 0.3);">
+                    <h2 class="text-xl font-bold mb-4 text-yellow-400">📨 Приглашения в игры</h2>
+                    <div class="space-y-3">
+                        ${pendingGames.map(game => `
+                            <div class="flex items-center justify-between bg-yellow-500/5 rounded-xl p-4 border border-yellow-500/20">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-10 h-10 rounded-full bg-yellow-500/20 flex items-center justify-center text-yellow-400">📨</div>
+                                    <div>
+                                        <div class="text-sm font-semibold text-gray-200">ID: ${game.id?.substring(0, 8)}...</div>
+                                        <span class="status-badge badge-waiting">Ожидание</span>
+                                    </div>
+                                </div>
+                                <button onclick="acceptGame('${game.id}')" class="btn-primary px-4 py-2 rounded-lg text-sm text-white">✅ Принять</button>
+                            </div>`).join('')}
+                    </div>
+                </div>` : ''}
+                ${activeGames.length > 0 ? `
+                <div class="glass-card p-6 mb-6">
+                    <h2 class="text-xl font-bold mb-4 text-cyan-400">⚡ Активные игры <span class="text-sm font-normal text-gray-500">(${activeGames.length})</span></h2>
+                    <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">${activeGames.map(g => renderGameCard(g)).join('')}</div>
+                </div>` : ''}
+                ${finishedGames.length > 0 ? `
+                <div class="glass-card p-6">
+                    <h2 class="text-xl font-bold mb-4 text-gray-400">📜 Завершённые игры <span class="text-sm font-normal text-gray-600">(${finishedGames.length})</span></h2>
+                    <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">${finishedGames.map(g => renderGameCard(g)).join('')}</div>
+                </div>` : ''}
+                ${state.games.length === 0 && pendingGames.length === 0 ? `
+                <div class="glass-card p-12 text-center">
+                    <div class="text-6xl mb-4">🎯</div>
+                    <h3 class="text-xl font-bold text-gray-300 mb-2">Пока нет игр</h3>
+                    <p class="text-gray-500">Создайте новую игру, чтобы начать!</p>
+                </div>` : ''}
+            </div>`;
+    }
+
+    function renderGameCard(game) {
+        const info = getGameStateInfo(game);
+        const mySign = getMySign(game);
+        const ai = isAiGame(game);
+        const finished = isGameFinished(game);
+        return `
+            <div class="game-card glass-card p-4 cursor-pointer" onclick="loadGame('${game.id}')">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-2">
+                        ${ai ? '<span title="Игра с ИИ">🤖</span>' : '<span title="PvP">👥</span>'}
+                        <span class="text-xs text-gray-500">${game.id?.substring(0, 8)}...</span>
+                    </div>
+                    <span class="status-badge ${info.class}">${info.text}</span>
+                </div>
+                <div class="mini-board mx-auto mb-3">
+                    ${game.field ? game.field.flat().map(cell => `
+                        <div class="mini-cell ${cell === 'X' ? 'cell-x' : cell === 'O' ? 'cell-o' : ''}">${cell === ' ' ? '' : cell}</div>
+                    `).join('') : ''}
+                </div>
+                <div class="text-center text-sm text-gray-400">
+                    ${mySign ? `Вы играете за <span class="font-bold ${mySign === 'X' ? 'cell-x' : 'cell-o'}">${mySign}</span>` : ''}
+                </div>
+            </div>`;
+    }
+
+    function renderGame() {
+        const game = state.currentGame;
+        if (!game) return renderDashboard();
+        const mySign = getMySign(game);
+        const myTurn = isMyTurn(game);
+        const finished = isGameFinished(game);
+        const info = getGameStateInfo(game);
+        const ai = isAiGame(game);
+        const meta = getMeta(game.id);
+        const winCells = getWinningCells(game);
+        const winCellSet = new Set(winCells.map(([r,c]) => `${r}-${c}`));
+
+        // Determine which player slot is "me"
+        const iAmPlayer1 = meta?.isPlayer1 === true;
+        const iAmPlayer2 = meta?.isPlayer1 === false;
+
+        // Determine opponent sign
+        const oppSign = mySign === 'X' ? 'O' : 'X';
+
+        // Check if it's a PvP game where we can't determine our sign
+        const signUnknown = !mySign;
+
+        return `
+            ${renderNavbar()}
+            <div class="max-w-4xl mx-auto px-4 pb-8 animate-fadeIn">
+                <div class="flex items-center justify-between mb-6">
+                    <button onclick="navigate('dashboard')" class="btn-secondary px-4 py-2 rounded-lg text-sm">← Назад</button>
+                    <div class="flex items-center gap-3">
+                        ${ai ? '<span class="text-sm text-gray-500">🤖 vs ИИ</span>' : '<span class="text-sm text-gray-500">👥 PvP</span>'}
+                        <span class="status-badge ${info.class} text-base">${info.text}</span>
+                    </div>
+                </div>
+
+                <div class="glass-card p-6 mb-6">
+                    <div class="flex flex-wrap items-center justify-center gap-6">
+                        <div class="text-center px-4 py-2 rounded-xl ${myTurn && mySign === 'X' ? 'bg-purple-500/20 ring-2 ring-purple-500' : ''}">
+                            <div class="text-xs text-gray-400 mb-1">Игрок X</div>
+                            <div class="text-2xl font-bold cell-x">X</div>
+                            <div class="text-xs mt-1 ${mySign === 'X' ? 'text-purple-400 font-bold' : 'text-gray-500'}">
+                                ${mySign === 'X' ? 'Вы' : 'Соперник'}
+                            </div>
+                        </div>
+                        <div class="text-2xl text-gray-600 font-bold">VS</div>
+                        <div class="text-center px-4 py-2 rounded-xl ${myTurn && mySign === 'O' ? 'bg-purple-500/20 ring-2 ring-purple-500' : ''}">
+                            <div class="text-xs text-gray-400 mb-1">Игрок O</div>
+                            <div class="text-2xl font-bold cell-o">O</div>
+                            <div class="text-xs mt-1 ${mySign === 'O' ? 'text-purple-400 font-bold' : 'text-gray-500'}">
+                                ${mySign === 'O' ? 'Вы' : ai ? '🤖 ИИ' : 'Соперник'}
+                            </div>
+                        </div>
+                    </div>
+                    ${!finished ? `
+                    <div class="mt-4 text-center turn-indicator">
+                        <span class="text-base font-semibold ${myTurn ? 'text-green-400' : 'text-purple-300'}">
+                            ${myTurn ? '🟢 Ваш ход!' : '⏳ Ожидание хода соперника...'}
+                        </span>
+                    </div>` : `
+                    <div class="mt-4 text-center">
+                        <span class="text-lg font-bold ${info.class === 'badge-won' ? 'text-yellow-400' : info.class === 'badge-lost' ? 'text-red-400' : 'text-gray-400'}">${game.state}</span>
+                    </div>`}
+                </div>
+
+                ${signUnknown && !finished ? `
+                <div class="glass-card p-4 mb-4 text-center" style="border-color: rgba(255,193,7,0.3);">
+                    <p class="text-yellow-400 text-sm mb-3">⚠️ Не удалось определить ваш знак. Выберите:</p>
+                    <div class="flex gap-3 justify-center">
+                        <button onclick="setMySignManually('${game.id}', 'X')" class="btn-secondary px-4 py-2 rounded-lg cell-x font-bold">Я играю за X</button>
+                        <button onclick="setMySignManually('${game.id}', 'O')" class="btn-secondary px-4 py-2 rounded-lg cell-o font-bold">Я играю за O</button>
+                    </div>
+                </div>` : ''}
+
+                <div class="flex justify-center mb-6">
+                    <div class="game-board">
+                        ${game.field ? game.field.map((row, rowIdx) =>
+                            row.map((cell, colIdx) => {
+                                const isWinCell = winCellSet.has(`${rowIdx}-${colIdx}`);
+                                const canClick = myTurn && !finished && cell === ' ';
+                                return `<div class="cell ${cell === 'X' ? 'cell-x' : cell === 'O' ? 'cell-o' : ''} ${!canClick ? 'cell-disabled' : ''} ${isWinCell ? 'cell-win' : ''}" ${canClick ? `onclick="handleCellClick(${rowIdx + 1}, ${colIdx + 1})"` : ''}>${cell === ' ' ? '' : cell}</div>`;
+                            }).join('')
+                        ).join('') : ''}
+                    </div>
+                </div>
+
+                ${!finished && !myTurn && !ai ? `
+                <div class="text-center mb-4">
+                    <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-purple-500/10 text-purple-300 text-sm">
+                        <span class="loading-spinner" style="width:14px;height:14px;border-width:2px;"></span>
+                        Ожидание хода соперника...
+                        <button onclick="refreshCurrentGame()" class="ml-2 underline text-xs text-gray-400 hover:text-white">Обновить</button>
+                    </div>
+                </div>` : ''}
+                ${!finished && ai && !myTurn ? `
+                <div class="text-center mb-4">
+                    <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-cyan-500/10 text-cyan-300 text-sm">
+                        <span class="loading-spinner" style="width:14px;height:14px;border-width:2px;"></span>
+                        ИИ думает...
+                    </div>
+                </div>` : ''}
+
+                ${game.turns && game.turns.length > 0 ? `
+                <div class="glass-card p-4">
+                    <h3 class="text-sm font-semibold text-gray-400 mb-3">📝 История ходов (${game.turns.length})</h3>
+                    <div class="flex flex-wrap gap-2">
+                        ${game.turns.map((turn, idx) => {
+                            const turnSign = (idx % 2 === 0) ? 'X' : 'O';
+                            return `<span class="text-xs px-2 py-1 rounded ${turnSign === 'X' ? 'bg-red-500/10 text-red-400' : 'bg-teal-500/10 text-teal-400'}">#${idx + 1}: ${turnSign} → (${turn.row}, ${turn.col})</span>`;
+                        }).join('')}
+                    </div>
+                </div>` : ''}
+
+                ${finished ? `
+                <div class="text-center mt-6 flex gap-3 justify-center flex-wrap">
+                    <button onclick="navigate('dashboard')" class="btn-primary px-6 py-3 rounded-xl text-white font-semibold">🏠 К списку игр</button>
+                    ${ai ? `<button onclick="createGame(true)" class="btn-secondary px-6 py-3 rounded-xl font-semibold">🔄 Реванш</button>` : ''}
+                </div>` : ''}
+            </div>`;
+    }
+
+    function renderAllGames() {
+        const games = state.allGames || [];
+        const active = games.filter(g => !isGameFinished(g));
+        const finished = games.filter(g => isGameFinished(g));
+        return `
+            ${renderNavbar()}
+            <div class="max-w-6xl mx-auto px-4 pb-8 animate-fadeIn">
+                <div class="glass-card p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-xl font-bold text-purple-300">🌐 Все игры</h2>
+                        <button onclick="loadAllGames()" class="btn-secondary px-3 py-1.5 rounded-lg text-sm">🔄 Обновить</button>
+                    </div>
+                    ${games.length > 0 ? `
+                        ${active.length > 0 ? `<h3 class="text-sm font-semibold text-cyan-400 mb-3">Активные (${active.length})</h3><div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3 mb-6">${active.map(g => renderGameCard(g)).join('')}</div>` : ''}
+                        ${finished.length > 0 ? `<h3 class="text-sm font-semibold text-gray-400 mb-3">Завершённые (${finished.length})</h3><div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">${finished.map(g => renderGameCard(g)).join('')}</div>` : ''}
+                    ` : `<div class="text-center py-12 text-gray-500"><div class="text-4xl mb-3">🎮</div><p>Пока нет ни одной игры</p></div>`}
+                </div>
+            </div>`;
+    }
+
+    function renderProfile() {
+        const myGames = state.games || [];
+        const wins = myGames.filter(g => {
+            const info = getGameStateInfo(g);
+            return info.text === 'Победа!';
+        }).length;
+        const losses = myGames.filter(g => {
+            const info = getGameStateInfo(g);
+            return info.text === 'Поражение' || info.text === 'ИИ победил';
+        }).length;
+        const draws = myGames.filter(g => getGameStateInfo(g).text === 'Ничья').length;
+        return `
+            ${renderNavbar()}
+            <div class="max-w-2xl mx-auto px-4 pb-8 animate-fadeIn">
+                <div class="glass-card p-6 mb-6">
+                    <h2 class="text-xl font-bold mb-4 text-purple-300">👤 Профиль</h2>
+                    <div class="space-y-4">
+                        <div class="flex items-center gap-4 p-4 rounded-xl bg-purple-500/5 border border-purple-500/20">
+                            <div class="w-16 h-16 rounded-full bg-gradient-to-br from-purple-500 to-cyan-500 flex items-center justify-center text-2xl font-bold">${state.user?.login?.charAt(0).toUpperCase() || '?'}</div>
+                            <div>
+                                <div class="text-lg font-bold">${state.user?.login}</div>
+                                <div class="text-sm text-gray-500">ID: ${state.user?.userId?.substring(0, 8)}...</div>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-4 gap-3">
+                            <div class="p-3 rounded-xl bg-cyan-500/5 border border-cyan-500/20 text-center">
+                                <div class="text-xl font-bold text-cyan-400">${myGames.filter(g => !isGameFinished(g)).length}</div>
+                                <div class="text-xs text-gray-400">Активных</div>
+                            </div>
+                            <div class="p-3 rounded-xl bg-green-500/5 border border-green-500/20 text-center">
+                                <div class="text-xl font-bold text-green-400">${wins}</div>
+                                <div class="text-xs text-gray-400">Побед</div>
+                            </div>
+                            <div class="p-3 rounded-xl bg-red-500/5 border border-red-500/20 text-center">
+                                <div class="text-xl font-bold text-red-400">${losses}</div>
+                                <div class="text-xs text-gray-400">Поражений</div>
+                            </div>
+                            <div class="p-3 rounded-xl bg-gray-500/5 border border-gray-500/20 text-center">
+                                <div class="text-xl font-bold text-gray-400">${draws}</div>
+                                <div class="text-xs text-gray-400">Ничьих</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="glass-card p-6">
+                    <h3 class="text-lg font-bold mb-4 text-gray-300">⚙️ Настройки</h3>
+                    <button onclick="signOut()" class="btn-danger px-6 py-3 rounded-xl font-semibold w-full">🚪 Выйти из аккаунта</button>
+                </div>
+            </div>`;
+    }
+
+    function renderModal() {
+        if (!state.modal) return '';
+        if (state.modal.type === 'create-with-player') {
+            return `
+                <div class="modal-overlay" onclick="closeModal(event)">
+                    <div class="glass-card p-6 w-full max-w-sm" onclick="event.stopPropagation()">
+                        <h3 class="text-xl font-bold mb-4 text-purple-300">👥 Играть с другом</h3>
+                        <div class="mb-4">
+                            <label class="block text-sm text-gray-400 mb-1">Логин соперника</label>
+                            <input type="text" id="opponent-login" class="input-field" placeholder="Введите логин друга">
+                        </div>
+                        <div class="flex gap-3">
+                            <button onclick="submitCreateWithPlayer()" class="btn-primary flex-1 py-3 rounded-xl text-white font-semibold">Создать</button>
+                            <button onclick="closeModal()" class="btn-secondary flex-1 py-3 rounded-xl font-semibold">Отмена</button>
+                        </div>
+                    </div>
+                </div>`;
+        }
+        if (state.modal.type === 'game-result') {
+            const isWin = state.modal.title.includes('Победа');
+            const isDraw = state.modal.title.includes('Ничья');
+            const emoji = isWin ? '🏆' : isDraw ? '🤝' : '😔';
+            const color = isWin ? 'text-yellow-400' : isDraw ? 'text-gray-300' : 'text-red-400';
+            return `
+                <div class="modal-overlay" onclick="closeModal(event)">
+                    <div class="glass-card p-8 w-full max-w-sm text-center" onclick="event.stopPropagation()">
+                        <div class="text-6xl mb-4">${emoji}</div>
+                        <h3 class="text-2xl font-bold mb-2 ${color}">${state.modal.title}</h3>
+                        <p class="text-gray-400 mb-6 text-sm">${state.modal.message}</p>
+                        <div class="flex gap-3">
+                            <button onclick="closeModal(); navigate('dashboard')" class="btn-secondary flex-1 py-3 rounded-xl font-semibold">К играм</button>
+                            <button onclick="closeModal(); createGame(true)" class="btn-primary flex-1 py-3 rounded-xl text-white font-semibold">🔄 Ещё раз</button>
+                        </div>
+                    </div>
+                </div>`;
+        }
+        return '';
+    }
+
+    // ==================== EVENT HANDLERS ====================
+    function navigate(page) {
+        stopPolling();
+        state.currentPage = page; state.modal = null;
+        if (page === 'dashboard') loadDashboard();
+        else if (page === 'all-games') loadAllGames();
+        else render();
+    }
+
+    function handleLogin(e) {
+        e.preventDefault();
+        const login = document.getElementById('login-input').value.trim();
+        const password = document.getElementById('password-input').value;
+        signIn(login, password);
+    }
+
+    function handleSignup(e) {
+        e.preventDefault();
+        const login = document.getElementById('signup-login').value.trim();
+        const password = document.getElementById('signup-password').value;
+        const confirm = document.getElementById('signup-confirm').value;
+        if (password !== confirm) { showToast('Пароли не совпадают!', 'error'); return; }
+        signUp(login, password);
+    }
+
+    function handleCellClick(row, col) {
+        if (!state.currentGame) return;
+        makeMove(state.currentGame.id, row, col);
+    }
+
+    function showCreateWithPlayerModal() {
+        state.modal = { type: 'create-with-player' };
+        render();
+        setTimeout(() => { const inp = document.getElementById('opponent-login'); if (inp) inp.focus(); }, 100);
+    }
+
+    async function submitCreateWithPlayer() {
+        const inp = document.getElementById('opponent-login');
+        const login = inp ? inp.value.trim() : '';
+        if (!login) { showToast('Введите логин соперника', 'error'); return; }
+        state.modal = null;
+        await createGame(false, login);
+    }
+
+    // Manual sign selection when auto-detection fails
+    function setMySignManually(gameId, sign) {
+        const game = state.currentGame;
+        const isP1 = game?.player1?.playerSign === sign;
+        setGameMeta(gameId, sign, false, isP1);
+        render();
+        showToast(`Вы играете за ${sign}`, 'success');
+    }
+
+    function closeModal(e) {
+        if (e && e.target !== e.currentTarget) return;
+        state.modal = null; render();
+    }
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && state.modal) { state.modal = null; render(); }
+    });
+
+    // ==================== INIT ====================
+    function init() {
+        const saved = localStorage.getItem('ttt_user');
+        if (saved) {
+            try {
+                state.user = JSON.parse(saved);
+                loadGameMeta();
+                state.currentPage = 'dashboard';
+                loadDashboard();
+            } catch { render(); }
+        } else { render(); }
+    }
+    init();
+</script>
+</body>
+</html>
