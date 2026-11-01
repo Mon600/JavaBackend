@@ -1,0 +1,8 @@
+.env
+**/.env
+**/.idea
+**/.gradle
+**/build
+**/out
+**/*.iml
+**/code.txt

@@ -1,0 +1,54 @@
+name: tictactoe-t04b
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-springdb}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres_dev_password}
+    ports:
+      # Только на localhost хоста — для psql / IDE, наружу БД не публикуется
+      - "127.0.0.1:${DB_HOST_PORT:-15432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: tictactoe-t04b:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # application.properties в T04B содержит жёстко заданные localhost:15432/springdb, postgres/1.
+      # Переменные SPRING_DATASOURCE_* переопределяют их без изменения кода (relaxed binding).
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${DB_NAME:-springdb}
+      SPRING_DATASOURCE_USERNAME: ${DB_USER:-postgres}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-postgres_dev_password}
+      JAVA_OPTS: ${JAVA_OPTS:--XX:MaxRAMPercentage=75.0 -XX:+ExitOnOutOfMemoryError}
+    ports:
+      # game.html этого проекта жёстко обращается к http://localhost:8080
+      - "${APP_PORT:-8080}:8080"
+      # Удалённая отладка (раскомментируйте и добавьте в JAVA_OPTS агент jdwp, см. README):
+      # - "127.0.0.1:5005:5005"
+    networks:
+      - backend
+
+networks:
+  backend:
+    driver: bridge
+
+volumes:
+  pgdata:
