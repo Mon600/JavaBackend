@@ -41,9 +41,7 @@ docker compose up --build
 | PostgreSQL (для psql / IDE) | `localhost:15432`, БД `tictactoe`, пользователь `tictactoe` |
 | Веб-клиент | откройте файл `src/game.html` в браузере |
 
-Клиент по умолчанию обращается к `http://localhost:8080`; адрес можно изменить в самом интерфейсе (блок «Адрес сервера API»).
 
-Значения по умолчанию подходят для локального запуска. Чтобы изменить порты, пароль БД и секрет JWT, скопируйте шаблон и отредактируйте его:
 
 ```bash
 cp ..env .env
@@ -52,53 +50,6 @@ docker compose up --build
 
 Остановка с сохранением данных: `docker compose down`. Полный сброс вместе с БД: `docker compose down -v`.
 
-Стеки T04B и T05B используют одинаковые порты по умолчанию (8080 и 15432). Чтобы запустить оба сразу, задайте разные `APP_PORT` и `DB_HOST_PORT` в `.env`. Тома и сети у проектов раздельные.
-
-## Локальная сборка и отладка
-
-Требуется JDK 21 и Gradle 8.14+. Файл `gradle-wrapper.jar` в T05B не закоммичен, поэтому `./gradlew` сразу не заработает: один раз сгенерируйте wrapper или используйте установленный Gradle.
-
-```bash
-# 1. Только БД в контейнере (из папки AP1_Jv_T05B_ID_1421427-1)
-docker compose up -d db
-
-# 2. Каталог Gradle-проекта
-cd src/TicTacToe
-
-# 3. Переменные окружения: приложение читает .env из рабочего каталога
-#    (spring.config.import=optional:file:.env[.properties])
-cp ../../..env .env
-
-# 4. Один раз: сгенерировать wrapper (по версии из gradle-wrapper.properties)
-gradle wrapper --gradle-version 8.14
-
-# Сборка исполняемого jar → build/libs/TicTacToe-1.0-SNAPSHOT.jar
-./gradlew bootJar
-
-# Тесты (каталога src/test пока нет, задача завершится без запуска тестов)
-./gradlew test
-
-# Проверка и автоформатирование кода (Spotless, google-java-format AOSP)
-./gradlew spotlessCheck
-./gradlew spotlessApply
-
-# Запуск из Gradle
-./gradlew bootRun
-
-# Запуск jar с параметрами JVM и удалённой отладкой на порту 5005
-java -Xms256m -Xmx512m \
-  -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005 \
-  -jar build/libs/TicTacToe-1.0-SNAPSHOT.jar
-
-# Отладка через Gradle (JVM ждёт подключения отладчика на порту 5005)
-./gradlew bootRun --debug-jvm
-```
-
-Отладка контейнера: в `.env` добавьте агент `jdwp` в `JAVA_OPTS`, а в `docker-compose.yml` раскомментируйте строку с портом `5005`.
-
-```bash
-JAVA_OPTS=-XX:MaxRAMPercentage=75.0 -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005
-```
 
 ### Переменные окружения
 
@@ -132,49 +83,6 @@ JAVA_OPTS=-XX:MaxRAMPercentage=75.0 -agentlib:jdwp=transport=dt_socket,server=y,
 | GET | `/game/games/not-accepted` | Входящие приглашения, ожидающие принятия |
 | GET | `/leaderboard?limit=10` | Таблица лидеров |
 
-Сценарий «регистрация → игра с компьютером → таблица лидеров» (нужен `jq`):
-
-```bash
-BASE=http://localhost:8080
-
-# Регистрация (201 Success!)
-curl -i -X POST "$BASE/auth/sign-up" \
-  -H 'Content-Type: application/json' \
-  -d '{"login":"alice","password":"password123"}'
-
-# Вход и сохранение access-токена
-TOKEN=$(curl -s -X POST "$BASE/auth/sign-in" \
-  -H 'Content-Type: application/json' \
-  -d '{"login":"alice","password":"password123"}' | jq -r .accessToken)
-
-# Кто я
-curl -s "$BASE/user/get-me" -H "Authorization: Bearer $TOKEN"
-
-# Новая партия против компьютера
-GAME_ID=$(curl -s -X POST "$BASE/game/create" \
-  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"vsAi":true}' | jq -r .id)
-
-# Ход в центр поля (строки и столбцы нумеруются с 1)
-curl -s -X POST "$BASE/game/$GAME_ID/move" \
-  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"row":2,"col":2}' | jq
-
-# Таблица лидеров (топ-5)
-curl -s "$BASE/leaderboard?limit=5" -H "Authorization: Bearer $TOKEN" | jq
-```
-
-Игра двух людей: первый игрок создаёт партию `{"vsAi":false,"player2Login":"bob"}`, второй видит её в `/game/games/not-accepted`, принимает через `POST /game/{gameId}/accept`, после чего игроки ходят по очереди через `/game/{gameId}/move`.
-
-Обновление токена:
-
-```bash
-curl -s -X POST "$BASE/token/refresh/access" \
-  -H 'Content-Type: application/json' \
-  -d '{"refreshToken":"<refreshToken из sign-in>"}'
-```
-
-Состояния партии (`GameState`): `WAITING`, `PLAYER_TURN`, `PLAYER_WIN`, `AI_WIN`, `DRAW`.
 
 ## Структура проекта
 

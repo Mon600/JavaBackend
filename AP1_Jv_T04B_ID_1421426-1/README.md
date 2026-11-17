@@ -21,7 +21,6 @@ REST-бэкенд онлайн-игры «Крестики-нолики» на S
 | Тесты (зависимости) | JUnit BOM / Jupiter | 5.10.0 |
 | Инфраструктура (Docker) | PostgreSQL | 16-alpine |
 
-Плагины `org.springframework.boot` 4.1.0 и `io.spring.dependency-management` 1.1.7 добавлены в `build.gradle.kts` вместе с Docker-поддержкой: без плагина Boot задачи `bootJar` и `bootRun` недоступны, а обычный jar не содержит зависимостей и не запускается через `java -jar`.
 
 ## Быстрый старт (one-command run)
 
@@ -40,7 +39,6 @@ docker compose up --build
 | PostgreSQL (для psql / IDE) | `localhost:15432`, БД `springdb`, пользователь `postgres` |
 | Веб-клиент | откройте файл `src/game.html` в браузере |
 
-Клиент жёстко использует `http://localhost:8080` (константа `API_BASE` в `game.html`), поэтому порт API на хосте лучше не менять.
 
 Значения по умолчанию подходят для локального запуска. Чтобы изменить порты и пароль БД, скопируйте шаблон и отредактируйте его:
 
@@ -51,43 +49,6 @@ docker compose up --build
 
 Остановка с сохранением данных: `docker compose down`. Полный сброс вместе с БД: `docker compose down -v`.
 
-Стеки T04B и T05B используют одинаковые порты по умолчанию (8080 и 15432). Чтобы запустить оба сразу, задайте разные `APP_PORT` и `DB_HOST_PORT` в `.env` (для T04B придётся поправить `API_BASE` в `game.html`). Тома и сети у проектов раздельные.
-
-## Локальная сборка и отладка
-
-Требуется JDK 21. В T04B закоммичен `gradle-wrapper.jar`, поэтому достаточно `./gradlew`.
-
-В `application.properties` жёстко заданы `localhost:15432/springdb`, пользователь `postgres` и пароль `1`. Эти значения переопределяются переменными окружения `SPRING_DATASOURCE_*` без правки кода.
-
-```bash
-
-cp ..env.example .env
-docker compose up -d db
-
-set -a; source .env; set +a
-cd src/TicTacToe
-
-
-export SPRING_DATASOURCE_URL="jdbc:postgresql://localhost:${DB_HOST_PORT}/${DB_NAME}"
-export SPRING_DATASOURCE_USERNAME="$DB_USER"
-export SPRING_DATASOURCE_PASSWORD="$DB_PASSWORD"
-
-./gradlew bootJar
-
-./gradlew bootRun
-
-java -Xms256m -Xmx512m \
-  -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005 \
-  -jar build/libs/TicTacToe-1.0-SNAPSHOT.jar
-
-./gradlew bootRun --debug-jvm
-```
-
-Отладка контейнера: в `.env` добавьте агент `jdwp` в `JAVA_OPTS`, а в `docker-compose.yml` раскомментируйте строку с портом `5005`.
-
-```bash
-JAVA_OPTS="-XX:MaxRAMPercentage=75.0 -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"
-```
 
 ### Переменные окружения
 
@@ -116,37 +77,6 @@ JAVA_OPTS="-XX:MaxRAMPercentage=75.0 -agentlib:jdwp=transport=dt_socket,server=y
 | POST | `/game/{gameId}/move` | Ход: `{"row": 1..3, "col": 1..3}` |
 | GET | `/game/all` | Все партии в системе |
 | GET | `/game/games/not-accepted` | Входящие приглашения, ожидающие принятия |
-
-Сценарий «регистрация → игра с компьютером» (нужен `jq`; `curl -u` сам формирует Basic-заголовок):
-
-```bash
-BASE=http://localhost:8080
-
-# Регистрация (201 Success!)
-curl -i -X POST "$BASE/auth/signup" \
-  -H 'Content-Type: application/json' \
-  -d '{"login":"alice","password":"password123"}'
-
-# Вход: вернёт UUID пользователя
-curl -i -u alice:password123 -X POST "$BASE/auth/login"
-
-# Новая партия против компьютера
-GAME_ID=$(curl -s -u alice:password123 -X POST "$BASE/game/create" \
-  -H 'Content-Type: application/json' \
-  -d '{"vsAi":true}' | jq -r .id)
-
-# Ход в центр поля (строки и столбцы нумеруются с 1)
-curl -s -u alice:password123 -X POST "$BASE/game/$GAME_ID/move" \
-  -H 'Content-Type: application/json' \
-  -d '{"row":2,"col":2}' | jq
-
-# Мои партии
-curl -s -u alice:password123 "$BASE/game/my-games" | jq
-```
-
-Игра двух людей: первый игрок создаёт партию `{"vsAi":false,"player2Login":"bob"}`, второй видит её в `/game/games/not-accepted`, принимает через `POST /game/{gameId}/accept`, после чего игроки ходят по очереди через `/game/{gameId}/move`.
-
-Состояния партии (`GameState`): `WAITING`, `PLAYER_TURN`, `PLAYER_WIN`, `AI_WIN`, `DRAW`.
 
 ## Структура проекта
 
