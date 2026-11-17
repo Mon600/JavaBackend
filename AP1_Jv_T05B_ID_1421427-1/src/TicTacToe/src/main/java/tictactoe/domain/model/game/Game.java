@@ -2,28 +2,15 @@ package tictactoe.domain.model.game;
 
 import java.time.LocalDateTime;
 import java.util.*;
-import lombok.Getter;
 
-@Getter
-public class Game {
-    private final UUID gameId;
-    private final Field field;
-    private final List<Turn> turns;
-    private final GameState state;
-    private final LocalDateTime createdAt;
-    private final Player player1;
-    private final Player player2;
-    private final UUID winnerId;
+import tictactoe.domain.model.rules.GameRules;
+import tictactoe.domain.model.rules.GameSign;
+import tictactoe.domain.model.rules.GameState;
 
+public record Game(UUID gameId, Field field, List<Turn> turns, GameState state, LocalDateTime createdAt, Player player1,
+                   Player player2, UUID winnerId) {
     public Game(Player player1, Player player2, GameState state) {
-        this.gameId = null;
-        this.field = new Field();
-        this.turns = new ArrayList<>();
-        this.state = state;
-        this.createdAt = null;
-        this.player1 = player1;
-        this.player2 = player2;
-        this.winnerId = null;
+        this(null, new Field(), new ArrayList<>(), state, null, player1, player2, null);
     }
 
     public Game(
@@ -45,17 +32,18 @@ public class Game {
         this.winnerId = winnerId;
     }
 
-    public List<Turn> getTurns() {
+    @Override
+    public List<Turn> turns() {
         return Collections.unmodifiableList(turns);
     }
 
     public Player getTurnOrder() {
         if (turns.isEmpty()) {
-            return (player1.getSign().equals(GameSign.X)) ? player1 : player2;
+            return (player1.sign().equals(GameSign.X)) ? player1 : player2;
         } else {
             Turn lastTurn = turns.getLast();
-            GameSign lastTurnSign = lastTurn.getPlayer().getSign();
-            return (lastTurnSign.equals(player1.getSign())) ? player2 : player1;
+            GameSign lastTurnSign = lastTurn.player().sign();
+            return (lastTurnSign.equals(player1.sign())) ? player2 : player1;
         }
     }
 
@@ -71,8 +59,8 @@ public class Game {
         List<Turn> turns = new ArrayList<>(this.turns);
         turns.add(turn);
         newField.setFieldValue(
-                turn.getPosition(),
-                (turn.getPlayer().getPlayerId().equals(player1.getPlayerId())) ? 1 : 2);
+                turn.position(),
+                (turn.player().playerId().equals(player1.playerId())) ? 1 : 2);
         return new Game(gameId, newField, turns, state, createdAt, player1, player2, winnerId);
     }
 
@@ -80,6 +68,6 @@ public class Game {
         if (this.state != GameState.AI_WIN && this.state != GameState.PLAYER_WIN) {
             throw new IllegalStateException("Game is still going on.");
         }
-        return this.turns.getLast().getPlayer().getPlayerId();
+        return this.turns.getLast().player().playerId();
     }
 }

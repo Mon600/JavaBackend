@@ -46,7 +46,7 @@ docker compose up --build
 Значения по умолчанию подходят для локального запуска. Чтобы изменить порты, пароль БД и секрет JWT, скопируйте шаблон и отредактируйте его:
 
 ```bash
-cp .env.example .env
+cp ..env .env
 docker compose up --build
 ```
 
@@ -67,7 +67,7 @@ cd src/TicTacToe
 
 # 3. Переменные окружения: приложение читает .env из рабочего каталога
 #    (spring.config.import=optional:file:.env[.properties])
-cp ../../.env.example .env
+cp ../../..env .env
 
 # 4. Один раз: сгенерировать wrapper (по версии из gradle-wrapper.properties)
 gradle wrapper --gradle-version 8.14
@@ -109,7 +109,7 @@ JAVA_OPTS=-XX:MaxRAMPercentage=75.0 -agentlib:jdwp=transport=dt_socket,server=y,
 | `SECRET_KEY_JWT` | Ключ подписи HS256, минимум 32 символа |
 | `DB_NAME`, `DB_HOST_PORT`, `APP_PORT`, `JAVA_OPTS` | Параметры Compose: имя БД, порты на хосте, опции JVM |
 
-Полный список с комментариями — в [`.env.example`](.env.example).
+Полный список с комментариями — в [`.env`](.env.example).
 
 ## Проверка функционала
 

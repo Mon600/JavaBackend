@@ -6,11 +6,10 @@ import org.springframework.data.repository.CrudRepository;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import tictactoe.datasource.model.GameEntity;
+import tictactoe.datasource.entity.GameEntity;
 
 
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 @Repository

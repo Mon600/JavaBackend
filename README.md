@@ -1,6 +1,6 @@
 # JavaBackend
 
-Две итерации учебного бэкенда «Крестики-нолики» на Spring Boot 4.1 / Java 21 / PostgreSQL. Каждый проект самодостаточен: у него свои `Dockerfile`, `docker-compose.yml`, `.env.example` и README.
+Две итерации учебного бэкенда «Крестики-нолики» на Spring Boot 4.1 / Java 21 / PostgreSQL. Каждый проект самодостаточен: у него свои `Dockerfile`, `docker-compose.yml`, `.env` и README.
 
 | Проект | Что внутри | Запуск |
 |---|---|---|

@@ -1,9 +1,10 @@
 package tictactoe.datasource.service;
 
 import java.util.*;
+
 import org.springframework.transaction.annotation.Transactional;
-import tictactoe.datasource.mapper.GameMapper;
-import tictactoe.datasource.model.GameEntity;
+import tictactoe.mapper.GameMapper;
+import tictactoe.datasource.entity.GameEntity;
 import tictactoe.datasource.repository.GameRepository;
 import tictactoe.domain.model.game.Game;
 
@@ -14,24 +15,22 @@ public class GameRepositoryService {
         this.gameRepository = gameRepository;
     }
 
-    @Transactional
+    @Transactional(rollbackFor =  Exception.class)
     public Game saveOrUpdateGame(Game game) {
-        if (game.getGameId() == null) {
-            GameEntity entity = GameMapper.toEntity(game);
-            gameRepository.save(entity);
-            return GameMapper.toGame(entity);
+        GameEntity entity;
+        if (game.gameId() == null) {
+            entity = GameMapper.toEntity(game);
         } else {
-            GameEntity entity =
-                    gameRepository
-                            .findById(game.getGameId())
-                            .orElseThrow(() -> new NoSuchElementException("Game not found"));
+            entity = gameRepository
+                    .findById(game.gameId())
+                    .orElseThrow(() -> new NoSuchElementException("Game not found"));
             GameMapper.updateEntity(entity, game);
-            gameRepository.save(entity);
-            return GameMapper.toGame(entity);
         }
+        gameRepository.save(entity);
+        return GameMapper.toGame(entity);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional(readOnly = true, rollbackFor =  Exception.class)
     public Game getGameById(UUID gameId) {
         Optional<GameEntity> game = gameRepository.findById(gameId);
         if (game.isPresent()) {
@@ -42,19 +41,19 @@ public class GameRepositoryService {
                 String.format("Game with ID %s not found", gameId.toString()));
     }
 
-    @Transactional(readOnly = true)
+    @Transactional(readOnly = true, rollbackFor =  Exception.class)
     public List<Game> getAllFinishedGames(UUID userId) {
         return gameRepository.findAllFinishedGames(userId).stream()
                 .map(GameMapper::toGame)
                 .toList();
     }
 
-    @Transactional(readOnly = true)
+    @Transactional(readOnly = true, rollbackFor =  Exception.class)
     public List<Game> getGamesByUserId(UUID userId) {
         return gameRepository.findByPlayerId(userId).stream().map(GameMapper::toGame).toList();
     }
 
-    @Transactional(readOnly = true)
+    @Transactional(readOnly = true, rollbackFor =  Exception.class)
     public List<Game> getNotAcceptedGames(UUID userId) {
         return gameRepository.findAllByPlayer2IdWithState(userId).stream()
                 .map(GameMapper::toGame)

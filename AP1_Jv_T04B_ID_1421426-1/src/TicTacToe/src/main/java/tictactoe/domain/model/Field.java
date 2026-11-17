@@ -1,6 +1,5 @@
 package tictactoe.domain.model;
 
-import lombok.Builder;
 import lombok.Getter;
 
 @Getter
@@ -24,8 +23,8 @@ public class Field {
 
     public int[][] getFieldMatrix() {
         int[][] fieldCopy = new int[rows][cols];
-        for (int i = 0; i < this.rows; i++) {
-            System.arraycopy(fieldMatrix[i], 0, fieldCopy[i], 0, this.cols);
+        for (int i = 0; i < rows; i++) {
+            System.arraycopy(fieldMatrix[i], 0, fieldCopy[i], 0, cols);
         }
         return fieldCopy;
     }
@@ -40,20 +39,19 @@ public class Field {
     }
 
 
-    public boolean setFieldValue(FieldPosition turnPos, int turn) {
+    public void setFieldValue(FieldPosition turnPos, int turn) {
         int row = turnPos.getRow();
         int col = turnPos.getCol();
         if (row > rows - 1 || row < 0 || col > cols - 1 || col < 0) {
-            return false;
+            return;
         }
         if (this.fieldMatrix[row][col] != 0) {
-            return false;
+            return;
         }
         if (turn < 1 || turn > 2) {
-            return false;
+            return;
         }
         this.fieldMatrix[row][col] = turn;
-        return true;
     }
 
     public int getFieldValue(FieldPosition position) {
@@ -64,8 +62,8 @@ public class Field {
                     String.format("Incorrect coordinates [%d %d]. Range: row [0-%d], col[0-%d]",
                             row,
                             col,
-                            this.rows - 1,
-                            this.cols - 1)
+                            rows - 1,
+                            cols - 1)
             );
         }
         return fieldMatrix[position.getRow()][position.getCol()];

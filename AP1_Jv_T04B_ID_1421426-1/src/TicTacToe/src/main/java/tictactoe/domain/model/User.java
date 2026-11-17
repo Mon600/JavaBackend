@@ -18,9 +18,4 @@ public class User {
         this.userId = null;
         this.login = login;
     }
-
-
-    public Optional<UUID> getUserId() {
-        return Optional.ofNullable(this.userId);
-    }
 }

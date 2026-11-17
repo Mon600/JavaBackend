@@ -32,17 +32,13 @@ services:
       db:
         condition: service_healthy
     environment:
-      # application.properties в T04B содержит жёстко заданные localhost:15432/springdb, postgres/1.
-      # Переменные SPRING_DATASOURCE_* переопределяют их без изменения кода (relaxed binding).
+
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${DB_NAME:-springdb}
       SPRING_DATASOURCE_USERNAME: ${DB_USER:-postgres}
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-postgres_dev_password}
       JAVA_OPTS: ${JAVA_OPTS:--XX:MaxRAMPercentage=75.0 -XX:+ExitOnOutOfMemoryError}
     ports:
-      # game.html этого проекта жёстко обращается к http://localhost:8080
       - "${APP_PORT:-8080}:8080"
-      # Удалённая отладка (раскомментируйте и добавьте в JAVA_OPTS агент jdwp, см. README):
-      # - "127.0.0.1:5005:5005"
     networks:
       - backend
 

@@ -1,10 +1,13 @@
 package tictactoe.domain.service.stat;
 
 import java.util.List;
-import tictactoe.datasource.mapper.StatMapper;
+
+import org.springframework.stereotype.Service;
+import tictactoe.mapper.StatMapper;
 import tictactoe.datasource.repository.StatRepository;
 import tictactoe.domain.model.users.PlayerStat;
 
+@Service
 public class LeaderBoardService {
     private StatRepository statRepository;
 

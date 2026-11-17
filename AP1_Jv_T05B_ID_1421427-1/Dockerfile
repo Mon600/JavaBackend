@@ -1,30 +1,22 @@
 # syntax=docker/dockerfile:1
 
-# Контекст сборки — эта папка (AP1_Jv_T05B_ID_1421427-1); Gradle-проект лежит в src/TicTacToe.
 ARG APP_DIR=src/TicTacToe
 
-# ---------------------------------------------------------------------------
-# Stage 1 — сборка исполняемого jar (Spring Boot bootJar)
-# JDK 21 обязателен: код использует List.getLast() (Java 21).
-# gradle-wrapper.jar в T05B не закоммичен, поэтому используем Gradle 8.14 из образа
-# (версия совпадает с gradle-wrapper.properties).
-# ---------------------------------------------------------------------------
+
+
 FROM gradle:8.14-jdk21 AS build
 ARG APP_DIR
 WORKDIR /home/gradle/project
 
-# Слой с зависимостями: перекачивается только при изменении build-скриптов
+
 COPY --chown=gradle:gradle ${APP_DIR}/settings.gradle.kts ${APP_DIR}/build.gradle.kts ./
 RUN gradle --no-daemon dependencies --configuration runtimeClasspath > /dev/null
 
-# Исходники и сборка
 COPY --chown=gradle:gradle ${APP_DIR}/src ./src
 RUN gradle --no-daemon bootJar \
     && cp "$(find build/libs -maxdepth 1 -name '*.jar' ! -name '*-plain.jar' | head -n 1)" app.jar
 
-# ---------------------------------------------------------------------------
-# Stage 2 — лёгкий runtime-образ (только JRE 21, без Gradle и исходников)
-# ---------------------------------------------------------------------------
+
 FROM eclipse-temurin:21-jre-alpine AS runtime
 
 RUN addgroup -S spring && adduser -S spring -G spring

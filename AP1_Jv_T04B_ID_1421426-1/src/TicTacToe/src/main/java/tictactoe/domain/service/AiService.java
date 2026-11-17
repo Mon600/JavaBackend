@@ -1,20 +1,21 @@
 package tictactoe.domain.service;
 
-import lombok.Getter;
+import org.springframework.stereotype.Service;
 import tictactoe.domain.model.*;
+import tictactoe.domain.rules.GameRules;
+import tictactoe.domain.rules.GameState;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
-
+@Service
 public class AiService {
     private final int emptyCell = 0;
 
     public Turn calculateBestTurn(Game game) {
         int bestScore = Integer.MIN_VALUE;
-        Field field = game.getField();
+        Field field = game.field();
         List<Turn> bestTurns = new ArrayList<>();
 
         for (int i = 0; i < field.getRows(); i++) {
@@ -24,7 +25,7 @@ public class AiService {
                 if (field.getFieldValue(new FieldPosition(i, j)) == emptyCell) {
 
                     Game newGame = game.simulateTurn(new Turn(currentPosition, game.getTurnOrder()));
-                    Turn possibleTurn = newGame.getTurns().getLast();
+                    Turn possibleTurn = newGame.turns().getLast();
                     int rating = minMax(newGame, 0);
 
                     if (rating > bestScore) {
@@ -46,7 +47,7 @@ public class AiService {
 
     private int minMax(Game game, int depth) {
         GameState state = GameRules.checkGameEnd(game);
-        Field field = game.getField();
+        Field field = game.field();
         switch (state) {
             case AI_WIN -> {
                 return 10 - depth;
@@ -59,7 +60,7 @@ public class AiService {
             }
             case PLAYER_TURN -> {
                 Player turningPlayer = game.getTurnOrder();
-                boolean isAiTurn = turningPlayer.getPlayerId().equals(Constants.aiId);
+                boolean isAiTurn = turningPlayer.playerId().equals(Constants.aiId);
                 int bestScore = isAiTurn ? Integer.MIN_VALUE : Integer.MAX_VALUE;
 
                 for (int i = 0; i < field.getRows(); i++) {
@@ -75,7 +76,7 @@ public class AiService {
                 return bestScore;
             }
         }
-        throw new IllegalStateException("Minimax reached unreachable state for game: " + game.getGameId());
+        throw new IllegalStateException("Minimax reached unreachable state for game: " + game.gameId());
     }
 
 }

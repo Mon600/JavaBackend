@@ -5,11 +5,10 @@ import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import tictactoe.domain.service.AuthService;
-import tictactoe.web.model.SignUpRequest;
+import tictactoe.web.dto.SignUpRequest;
 
 
 import javax.naming.AuthenticationException;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/auth")

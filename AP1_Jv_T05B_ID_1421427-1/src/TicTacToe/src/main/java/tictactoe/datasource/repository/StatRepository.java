@@ -5,8 +5,10 @@ import java.util.UUID;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.data.repository.query.Param;
-import tictactoe.datasource.model.UserEntity;
+import org.springframework.stereotype.Repository;
+import tictactoe.datasource.entity.UserEntity;
 
+@Repository
 public interface StatRepository extends CrudRepository<UserEntity, UUID> {
 
     @Query(

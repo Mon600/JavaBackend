@@ -1,29 +1,16 @@
 package tictactoe.domain.model;
 
 
-import lombok.Getter;
-import tictactoe.domain.service.GameService;
+import tictactoe.domain.rules.GameRules;
+import tictactoe.domain.rules.GameSign;
+import tictactoe.domain.rules.GameState;
 
 import java.util.*;
 
 
-@Getter
-public class Game {
-    private final UUID gameId;
-    private final Field field;
-    private final List<Turn> turns;
-    private final GameState state;
-    private final Player player1;
-    private final Player player2;
-
-
+public record Game(UUID gameId, Field field, List<Turn> turns, GameState state, Player player1, Player player2) {
     public Game(Player player1, Player player2, GameState state) {
-        this.gameId = null;
-        this.field = new Field();
-        this.turns = new ArrayList<>();
-        this.state = state;
-        this.player1 = player1;
-        this.player2 = player2;
+        this(null, new Field(), new ArrayList<>(), state, player1, player2);
     }
 
     public Game(UUID gameId, Field field, List<Turn> turns, GameState state, Player player1, Player player2) {
@@ -36,17 +23,18 @@ public class Game {
 
     }
 
-    public List<Turn> getTurns() {
+    @Override
+    public List<Turn> turns() {
         return Collections.unmodifiableList(turns);
     }
 
     public Player getTurnOrder() {
         if (turns.isEmpty()) {
-            return (player1.getSign().equals(GameSign.X)) ? player1 : player2;
+            return (player1.sign().equals(GameSign.X)) ? player1 : player2;
         } else {
             Turn lastTurn = turns.getLast();
-            GameSign lastTurnSign = lastTurn.getPlayer().getSign();
-            return (lastTurnSign.equals(player1.getSign())) ? player2 : player1;
+            GameSign lastTurnSign = lastTurn.getPlayer().sign();
+            return (lastTurnSign.equals(player1.sign())) ? player2 : player1;
         }
     }
 
@@ -61,7 +49,7 @@ public class Game {
         Field newField = Field.getFieldCopy(this.field);
         List<Turn> turns = new ArrayList<>(this.turns);
         turns.add(turn);
-        newField.setFieldValue(turn.getPosition(), (turn.getPlayer().getPlayerId().equals(player1.getPlayerId())) ? 1: 2);
+        newField.setFieldValue(turn.getPosition(), (turn.getPlayer().playerId().equals(player1.playerId())) ? 1 : 2);
         return new Game(
                 this.gameId,
                 newField,
@@ -76,7 +64,7 @@ public class Game {
         if (this.state != GameState.AI_WIN && this.state != GameState.PLAYER_WIN) {
             throw new IllegalStateException("Game is still going on.");
         }
-        UUID winnerId = this.turns.getLast().getPlayer().getPlayerId();
+        UUID winnerId = this.turns.getLast().getPlayer().playerId();
         if (winnerId.equals(Constants.aiId)) {
             return GameState.AI_WIN.getStateString();
         }

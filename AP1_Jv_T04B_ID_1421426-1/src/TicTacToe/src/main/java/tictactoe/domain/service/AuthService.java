@@ -4,23 +4,25 @@ package tictactoe.domain.service;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import tictactoe.datasource.model.UserEntity;
+import org.springframework.stereotype.Service;
+import tictactoe.datasource.entity.UserEntity;
 import tictactoe.domain.model.User;
-import tictactoe.web.mapper.UserRequestMapper;
-import tictactoe.web.model.SignUpRequest;
+import tictactoe.domain.service.Impl.UserServiceImpl;
+import tictactoe.mapper.UserRequestMapper;
+import tictactoe.web.dto.SignUpRequest;
 
 import java.util.Base64;
 import java.util.Optional;
 import java.util.UUID;
 
-
+@Service
 public class AuthService {
     private final PasswordEncoder passwordEncoder;
-    private final UserService userService;
+    private final UserServiceImpl userServiceImpl;
 
-    public AuthService(PasswordEncoder passwordEncoder, UserService userService) {
+    public AuthService(PasswordEncoder passwordEncoder, UserServiceImpl userServiceImpl) {
         this.passwordEncoder = passwordEncoder;
-        this.userService = userService;
+        this.userServiceImpl = userServiceImpl;
     }
 
     private String getHashPassword(String password) {
@@ -31,7 +33,7 @@ public class AuthService {
         try {
             User user = UserRequestMapper.toUser(credentials);
             String hashPassword = getHashPassword(credentials.getPassword());
-            return userService.createUser(user, hashPassword);
+            return userServiceImpl.createUser(user, hashPassword);
         } catch (DataIntegrityViolationException e) {
             return false;
         }
@@ -41,7 +43,7 @@ public class AuthService {
         String[] credentials = decodeCredentials(base64Credentials);
         String login = credentials[0];
         String password = credentials[1];
-        Optional<UserEntity> optionalEntity = userService.getUser(login);
+        Optional<UserEntity> optionalEntity = userServiceImpl.getUser(login);
         if (optionalEntity.isPresent() && passwordEncoder.matches(password, optionalEntity.get().getHashedPassword())) {
             return optionalEntity.get().getUserId();
         }

@@ -5,9 +5,9 @@ import org.springframework.http.ResponseEntity;
 
 import org.springframework.web.bind.annotation.*;
 import tictactoe.domain.service.auth.AuthService;
-import tictactoe.web.model.auth.JwtRequest;
-import tictactoe.web.model.auth.JwtResponse;
-import tictactoe.web.model.auth.RefreshJwtRequest;
+import tictactoe.web.dto.auth.JwtRequest;
+import tictactoe.web.dto.auth.JwtResponse;
+import tictactoe.web.dto.auth.RefreshJwtRequest;
 
 
 

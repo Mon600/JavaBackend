@@ -16,12 +16,12 @@ import tictactoe.datasource.repository.GameRepository;
 import tictactoe.datasource.repository.StatRepository;
 import tictactoe.datasource.repository.UserRepository;
 import tictactoe.datasource.service.GameRepositoryService;
-import tictactoe.domain.model.security.AuthFilter;
-import tictactoe.domain.model.security.JwtProvider;
+import tictactoe.security.AuthFilter;
+import tictactoe.security.JwtProvider;
 import tictactoe.domain.service.auth.AuthService;
-import tictactoe.domain.service.auth.UserService;
+import tictactoe.domain.service.auth.Impl.UserServiceImpl;
 import tictactoe.domain.service.game.ai.AiService;
-import tictactoe.domain.service.game.player.GameService;
+import tictactoe.domain.service.game.player.Impl.GameServiceImpl;
 import tictactoe.domain.service.stat.LeaderBoardService;
 
 @Configuration
@@ -38,14 +38,14 @@ public class SpringConfiguration {
     }
 
     @Bean
-    public UserService userService(UserRepository userRepository) {
-        return new UserService(userRepository);
+    public UserServiceImpl userService(UserRepository userRepository) {
+        return new UserServiceImpl(userRepository);
     }
 
     @Bean
-    public GameService gameService(
-            GameRepositoryService repositoryService, AiService aiService, UserService userService) {
-        return new GameService(repositoryService, aiService, userService);
+    public GameServiceImpl gameService(
+            GameRepositoryService repositoryService, AiService aiService, UserServiceImpl userServiceImpl) {
+        return new GameServiceImpl(repositoryService, aiService, userServiceImpl);
     }
 
     @Bean
@@ -62,8 +62,8 @@ public class SpringConfiguration {
     public JwtProvider jwtProvider() {return new JwtProvider(); }
 
     @Bean
-    public AuthService authService(PasswordEncoder passwordEncoder, UserService userService, JwtProvider jwtProvider) {
-        return new AuthService(passwordEncoder, userService, jwtProvider);
+    public AuthService authService(PasswordEncoder passwordEncoder, UserServiceImpl userServiceImpl, JwtProvider jwtProvider) {
+        return new AuthService(passwordEncoder, userServiceImpl, jwtProvider);
     }
 
     @Bean

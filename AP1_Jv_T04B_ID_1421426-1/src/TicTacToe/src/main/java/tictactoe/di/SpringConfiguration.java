@@ -10,14 +10,14 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import tictactoe.datasource.repository.GameRepository;
 import tictactoe.datasource.repository.UserRepository;
-import tictactoe.domain.model.AuthFilter;
-import tictactoe.domain.service.AiService;
-import tictactoe.domain.service.AuthService;
-import tictactoe.domain.service.GameService;
+import tictactoe.domain.service.*;
+import tictactoe.domain.service.Impl.GameServiceImpl;
+import tictactoe.domain.service.Impl.UserServiceImpl;
+import tictactoe.security.AuthFilter;
 import tictactoe.datasource.service.GameRepositoryService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import tictactoe.domain.service.UserService;
+
 import java.util.Arrays;
 
 @Configuration
@@ -35,13 +35,13 @@ public class SpringConfiguration {
 
 
     @Bean
-    public UserService userService(UserRepository userRepository) {
-        return new UserService(userRepository);
+    public UserServiceImpl userService(UserRepository userRepository) {
+        return new UserServiceImpl(userRepository);
     }
 
     @Bean
-    public GameService gameService(GameRepositoryService repositoryService, AiService aiService, UserService userService) {
-        return new GameService(repositoryService, aiService, userService);
+    public GameServiceImpl gameService(GameRepositoryService repositoryService, AiService aiService, UserServiceImpl userServiceImpl) {
+        return new GameServiceImpl(repositoryService, aiService, userServiceImpl);
     }
 
     @Bean
@@ -50,13 +50,13 @@ public class SpringConfiguration {
     }
 
     @Bean
-    public AuthService authService(PasswordEncoder passwordEncoder, UserService userService) {
-        return new AuthService(passwordEncoder, userService);
+    public AuthService authService(PasswordEncoder passwordEncoder, UserServiceImpl userServiceImpl) {
+        return new AuthService(passwordEncoder, userServiceImpl);
     }
 
     @Bean
     public AuthFilter authFilter(PasswordEncoder passwordEncoder, AuthService authService) {
-        return new AuthFilter(authService, passwordEncoder);
+        return new AuthFilter(authService);
     }
 
     @Bean

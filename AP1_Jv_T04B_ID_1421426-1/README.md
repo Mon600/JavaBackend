@@ -45,7 +45,7 @@ docker compose up --build
 Значения по умолчанию подходят для локального запуска. Чтобы изменить порты и пароль БД, скопируйте шаблон и отредактируйте его:
 
 ```bash
-cp .env.example .env
+cp ..env .env
 docker compose up --build
 ```
 
@@ -60,34 +60,26 @@ docker compose up --build
 В `application.properties` жёстко заданы `localhost:15432/springdb`, пользователь `postgres` и пароль `1`. Эти значения переопределяются переменными окружения `SPRING_DATASOURCE_*` без правки кода.
 
 ```bash
-# 1. Только БД в контейнере (из папки AP1_Jv_T04B_ID_1421426-1)
-cp .env.example .env
+
+cp ..env.example .env
 docker compose up -d db
 
-# 2. Загрузить переменные и перейти в каталог Gradle-проекта
 set -a; source .env; set +a
 cd src/TicTacToe
 
-# 3. Параметры подключения к БД для приложения
+
 export SPRING_DATASOURCE_URL="jdbc:postgresql://localhost:${DB_HOST_PORT}/${DB_NAME}"
 export SPRING_DATASOURCE_USERNAME="$DB_USER"
 export SPRING_DATASOURCE_PASSWORD="$DB_PASSWORD"
 
-# Сборка исполняемого jar → build/libs/TicTacToe-1.0-SNAPSHOT.jar
 ./gradlew bootJar
 
-# Тесты (каталога src/test пока нет, задача завершится без запуска тестов)
-./gradlew test
-
-# Запуск из Gradle
 ./gradlew bootRun
 
-# Запуск jar с параметрами JVM и удалённой отладкой на порту 5005
 java -Xms256m -Xmx512m \
   -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005 \
   -jar build/libs/TicTacToe-1.0-SNAPSHOT.jar
 
-# Отладка через Gradle (JVM ждёт подключения отладчика на порту 5005)
 ./gradlew bootRun --debug-jvm
 ```
 
@@ -106,7 +98,7 @@ JAVA_OPTS="-XX:MaxRAMPercentage=75.0 -agentlib:jdwp=transport=dt_socket,server=y
 | `APP_PORT` | Порт API на хосте (внутри контейнера всегда 8080) |
 | `JAVA_OPTS` | Опции JVM в контейнере |
 
-Полный список с комментариями — в [`.env.example`](.env.example).
+Полный список с комментариями — в [`.env`](.env.example).
 
 ## Проверка функционала
 
